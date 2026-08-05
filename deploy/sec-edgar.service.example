@@ -1,0 +1,20 @@
+[Unit]
+Description=SEC EDGAR local ingestion pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sec-edgar
+Group=sec-edgar
+WorkingDirectory=/opt/sec-edgar-ingestion
+Environment="SEC_USER_AGENT=Research Organization operations@example.com"
+ExecStart=/opt/sec-edgar-ingestion/.venv/bin/sec-edgar --config /etc/sec-edgar/config.yaml run --form 10-K --start-year 2009 --end-year 2026 --cik-file /etc/sec-edgar/ciks.csv
+Restart=on-failure
+RestartSec=30
+KillSignal=SIGTERM
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target
+

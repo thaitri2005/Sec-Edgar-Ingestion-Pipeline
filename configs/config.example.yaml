@@ -1,0 +1,28 @@
+storage:
+  root_directory: ../SEC_DATA
+
+download:
+  max_workers: 3
+  batch_size: 10000
+  retry_limit: 5
+  request_delay_seconds: 0.35
+  request_timeout_seconds: 60
+  backoff_base_seconds: 2.0
+  checksum_algorithm: sha256
+
+discovery:
+  start_year: 2009
+  end_year: null
+  cik_file: null
+  all_ciks: false
+
+sec:
+  user_agent: "Research Organization contact@example.com"
+
+logging:
+  console_level: INFO
+  file_level: DEBUG
+  max_bytes: 10485760
+  backup_count: 10
+  progress_every: 100
+

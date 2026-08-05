@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools==75.8.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sec-edgar-ingestion"
+version = "0.1.0"
+description = "Fault-tolerant local ingestion pipeline for SEC EDGAR filings"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PyYAML==6.0.2",
+    "requests==2.32.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "responses==0.25.3",
+]
+
+[project.scripts]
+sec-edgar = "sec_edgar_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+pythonpath = ["src"]
