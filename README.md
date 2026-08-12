@@ -4,6 +4,10 @@ Fault-tolerant local acquisition of SEC EDGAR `10-K`, `10-Q`, and `8-K` filings.
 
 The original `Data_Collection_Method.ipynb` remains a reference and is not used at runtime.
 
+For the complete implemented data flow, status model, production procedure,
+recovery playbooks, and maintenance checklist, see
+[`docs/PIPELINE_WORKFLOW.md`](docs/PIPELINE_WORKFLOW.md).
+
 ## Features
 
 - Quarterly `master.idx` discovery with inclusive year filtering.

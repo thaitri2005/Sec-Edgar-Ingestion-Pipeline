@@ -79,7 +79,11 @@ class FilingDownloader:
                     filing_type,
                 )
                 report_date = report_date or parsed_report_date
-                html_url = str(item["submission_txt_url"]).rsplit("/", 1)[0]
+                # The quarterly master index points the complete submission TXT at
+                # /data/{cik}/{accession}.txt, while filing documents live under
+                # /data/{cik}/{accession-without-dashes}/.  The filing index URL is
+                # already rooted in that document directory.
+                html_url = str(item["filing_url"]).rsplit("/", 1)[0]
                 html_url = f"{html_url}/{primary_filename}"
                 html_path = self.storage.artifact_path(
                     base_form, cik, filing_year, accession, ArtifactKind.HTML

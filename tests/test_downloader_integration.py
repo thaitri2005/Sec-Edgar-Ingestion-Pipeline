@@ -46,7 +46,8 @@ class FakeClient:
 
 def make_filing(index: int) -> DiscoveredFiling:
     accession = f"0000320193-23-{index:06d}"
-    root = f"https://example.test/{accession}"
+    archive_root = "https://example.test/Archives/edgar/data/320193"
+    filing_directory = f"{archive_root}/{accession.replace('-', '')}"
     return DiscoveredFiling(
         accession_number=accession,
         cik="0000320193",
@@ -55,8 +56,8 @@ def make_filing(index: int) -> DiscoveredFiling:
         filing_type="10-K/A" if index % 2 else "10-K",
         filing_date="2023-11-03",
         report_date=None,
-        filing_url=f"{root}-index.html",
-        submission_txt_url=f"{root}.txt",
+        filing_url=f"{filing_directory}/{accession}-index.html",
+        submission_txt_url=f"{archive_root}/{accession}.txt",
     )
 
 
@@ -77,7 +78,7 @@ def fixture_payloads(filings: list[DiscoveredFiling]) -> dict[str, bytes]:
     payloads: dict[str, bytes] = {}
     for filing in filings:
         payloads[filing.submission_txt_url] = txt_payload(filing)
-        html_url = filing.submission_txt_url.rsplit("/", 1)[0]
+        html_url = filing.filing_url.rsplit("/", 1)[0]
         html_url += f"/primary-{filing.accession_number}.htm"
         payloads[html_url] = b"<!doctype html><html><body>Primary filing</body></html>"
     return payloads
