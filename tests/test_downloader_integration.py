@@ -155,6 +155,42 @@ def test_partial_download_retries_only_missing_html(app_config, logger) -> None:
         assert client.calls[html_url] == 2
 
 
+def test_wrapped_primary_html_is_stored_as_clean_html(app_config, logger) -> None:
+    storage = LocalStorageBackend(app_config.storage.root_directory)
+    storage.ensure_layout()
+    filing = make_filing(6)
+    payloads = fixture_payloads([filing])
+    html_url = next(url for url in payloads if url.endswith(".htm"))
+    primary_html = payloads[html_url]
+    payloads[html_url] = (
+        b"<DOCUMENT>\n<TYPE>10-K\n<SEQUENCE>1\n"
+        b"<FILENAME>primary.htm\n<TEXT>\n"
+        + primary_html
+        + b"\n</TEXT>\n</DOCUMENT>\n"
+    )
+    client = FakeClient(payloads)
+
+    with MetadataRepository(app_config.database_path) as repository:
+        repository.initialize()
+        run_id = create_run(repository, app_config, [filing])
+        service = DownloadService(
+            app_config,
+            repository,
+            FilingDownloader(app_config, client, storage, logger),
+            logger,
+        )
+
+        assert service.download_run(run_id) == RunStatus.SUCCESS
+        row = repository.connection.execute(
+            "SELECT local_path FROM artifacts WHERE accession_number = ? AND kind = 'HTML'",
+            (filing.accession_number,),
+        ).fetchone()
+        with storage.open_binary(PurePosixPath(row["local_path"])) as handle:
+            stored_html = handle.read()
+        assert stored_html.strip() == primary_html
+        assert not stored_html.lstrip().startswith(b"<DOCUMENT>")
+
+
 def test_verify_marks_missing_file_failed(app_config, logger) -> None:
     storage = LocalStorageBackend(app_config.storage.root_directory)
     storage.ensure_layout()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import PurePosixPath
 from typing import Any
@@ -20,6 +21,55 @@ from sec_edgar_pipeline.models import (
 from sec_edgar_pipeline.sec_client import SecClient, SecRequestError
 from sec_edgar_pipeline.storage import StorageBackend
 from sec_edgar_pipeline.validator import extract_submission_metadata, validate_artifact
+
+
+HTML_WRAPPER_DETECTION_LIMIT = 256 * 1024
+HTML_WRAPPER_TAIL_SIZE = 64 * 1024
+
+
+def normalize_primary_html_chunks(chunks: Iterable[bytes]) -> Iterator[bytes]:
+    """Remove an SEC SGML document wrapper while preserving the HTML payload."""
+    iterator = iter(chunks)
+    prefix = bytearray()
+
+    for chunk in iterator:
+        if not chunk:
+            continue
+        prefix.extend(chunk)
+        stripped = bytes(prefix).lstrip()
+        if len(stripped) < len(b"<DOCUMENT>"):
+            continue
+        if not stripped.upper().startswith(b"<DOCUMENT>"):
+            yield bytes(prefix)
+            yield from iterator
+            return
+
+        text_start = bytes(prefix).upper().find(b"<TEXT>")
+        if text_start >= 0:
+            content = bytes(prefix[text_start + len(b"<TEXT>") :])
+            break
+        if len(prefix) > HTML_WRAPPER_DETECTION_LIMIT:
+            raise ValueError("Wrapped SEC HTML response has no <TEXT> marker")
+    else:
+        if prefix:
+            yield bytes(prefix)
+        return
+
+    tail = bytearray(content)
+    for chunk in iterator:
+        if not chunk:
+            continue
+        tail.extend(chunk)
+        if len(tail) > HTML_WRAPPER_TAIL_SIZE:
+            emit_length = len(tail) - HTML_WRAPPER_TAIL_SIZE
+            yield bytes(tail[:emit_length])
+            del tail[:emit_length]
+
+    text_end = bytes(tail).upper().rfind(b"</TEXT>")
+    if text_end < 0:
+        raise ValueError("Wrapped SEC HTML response has no closing </TEXT> marker")
+    if text_end:
+        yield bytes(tail[:text_end])
 
 
 class FilingDownloader:
@@ -202,9 +252,12 @@ class FilingDownloader:
             attempts = stream_response.attempts
             response = stream_response.response
             try:
+                chunks = self.client.iter_content(response)
+                if kind == ArtifactKind.HTML:
+                    chunks = normalize_primary_html_chunks(chunks)
                 stored = self.storage.write_atomic(
                     relative_path,
-                    self.client.iter_content(response),
+                    chunks,
                     self.config.download.checksum_algorithm,
                 )
             finally:

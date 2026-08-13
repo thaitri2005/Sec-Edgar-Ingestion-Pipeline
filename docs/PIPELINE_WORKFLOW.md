@@ -242,10 +242,26 @@ For each filing:
    HTML filename whose `<TYPE>` matches the actual form.
 5. Fall back to the first HTML filename only if there is no exact form match.
 6. Build the primary-document URL from the filing index directory.
-7. Reuse a valid existing HTML when possible; otherwise download it.
-8. Validate that the HTML is nonempty, resembles HTML, and is not a known SEC
-   block page.
+7. Reuse a valid existing HTML when possible; otherwise download it. Some older
+   SEC primary-document responses retain an SGML `<DOCUMENT>` wrapper; in that
+   case, stream only the content inside `<TEXT>...</TEXT>` to the `.htm` file.
+8. Validate that the HTML is nonempty, begins like HTML rather than SEC SGML,
+   and is not a known SEC block page.
 9. Mark the filing `SUCCESS` only when both artifacts are successful.
+
+### TXT use for NLP
+
+The TXT artifact is intentionally preserved byte-for-byte as the complete SEC
+submission. It is the archival source for downstream NLP, but it is not clean
+report prose: it can contain the primary filing, exhibits, certifications,
+XBRL, XML, and other documents. NLP preparation must select the `<DOCUMENT>`
+whose `<TYPE>` matches the filing's actual form, take its `<TEXT>` content, and
+then perform HTML parsing and text normalization. Feeding the complete TXT
+directly to a model would mix the primary report with unrelated artifacts.
+
+The ingestion pipeline does not perform that NLP transformation. Keeping raw
+TXT immutable allows later preprocessing to be changed and reproduced without
+redownloading from SEC.
 
 ### Important SEC URL rule
 

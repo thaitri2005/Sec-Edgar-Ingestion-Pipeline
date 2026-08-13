@@ -72,8 +72,16 @@ def validate_artifact(
         compact_accession = accession_number.replace("-", "").encode()
         if accession_number.encode() not in prefix and compact_accession not in prefix:
             return ValidationResult(False, "TXT does not contain the expected accession")
-    elif not any(marker in prefix for marker in (b"<html", b"<!doctype", b"<ix:html")):
-        return ValidationResult(False, "Primary document does not look like HTML")
+    else:
+        html_prefix = prefix.lstrip()
+        if html_prefix.startswith(b"\xef\xbb\xbf"):
+            html_prefix = html_prefix[3:].lstrip()
+        if html_prefix.startswith(b"<document>"):
+            return ValidationResult(False, "Primary HTML still has an SEC document wrapper")
+        if not html_prefix.startswith(
+            (b"<!doctype", b"<html", b"<ix:html", b"<?xml", b"<!--")
+        ):
+            return ValidationResult(False, "Primary document does not begin like HTML")
 
     return ValidationResult(True)
 

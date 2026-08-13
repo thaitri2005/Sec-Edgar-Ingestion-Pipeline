@@ -61,6 +61,21 @@ def test_validator_rejects_sec_block_page(tmp_path) -> None:
     assert "block" in result.error.lower()
 
 
+def test_validator_rejects_wrapped_html(tmp_path) -> None:
+    storage = LocalStorageBackend(tmp_path)
+    path = PurePosixPath("raw/10-K/0000320193/2023/example.htm")
+    storage.write_atomic(
+        path,
+        (b"<DOCUMENT><TEXT><html>Annual report</html></TEXT></DOCUMENT>",),
+        "sha256",
+    )
+
+    result = validate_artifact(storage, path, ArtifactKind.HTML, ACCESSION)
+
+    assert not result.valid
+    assert "wrapper" in result.error.lower()
+
+
 def test_normalize_cik() -> None:
     assert normalize_cik("320193") == "0000320193"
 
