@@ -10,6 +10,7 @@ class Status(StrEnum):
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
 
 
 class ArtifactKind(StrEnum):

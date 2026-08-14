@@ -74,6 +74,19 @@ CONFORMED PERIOD OF REPORT: 20230930
 """.encode()
 
 
+def text_primary_payload(filing: DiscoveredFiling) -> bytes:
+    primary = f"primary-{filing.accession_number}.txt"
+    return f"""<SEC-DOCUMENT>{filing.accession_number}.txt
+ACCESSION NUMBER: {filing.accession_number}
+CONFORMED PERIOD OF REPORT: 20230930
+<DOCUMENT>
+<TYPE>{filing.filing_type}
+<FILENAME>{primary}
+<TEXT>Legacy plain-text annual report</TEXT>
+</DOCUMENT>
+""".encode()
+
+
 def fixture_payloads(filings: list[DiscoveredFiling]) -> dict[str, bytes]:
     payloads: dict[str, bytes] = {}
     for filing in filings:
@@ -189,6 +202,36 @@ def test_wrapped_primary_html_is_stored_as_clean_html(app_config, logger) -> Non
             stored_html = handle.read()
         assert stored_html.strip() == primary_html
         assert not stored_html.lstrip().startswith(b"<DOCUMENT>")
+
+
+def test_text_only_primary_succeeds_without_html(app_config, logger) -> None:
+    storage = LocalStorageBackend(app_config.storage.root_directory)
+    storage.ensure_layout()
+    filing = make_filing(8)
+    client = FakeClient({filing.submission_txt_url: text_primary_payload(filing)})
+
+    with MetadataRepository(app_config.database_path) as repository:
+        repository.initialize()
+        run_id = create_run(repository, app_config, [filing])
+        service = DownloadService(
+            app_config,
+            repository,
+            FilingDownloader(app_config, client, storage, logger),
+            logger,
+        )
+
+        assert service.download_run(run_id) == RunStatus.SUCCESS
+        row = repository.connection.execute(
+            "SELECT status, local_path, file_size, checksum FROM artifacts "
+            "WHERE accession_number = ? AND kind = 'HTML'",
+            (filing.accession_number,),
+        ).fetchone()
+        assert row["status"] == Status.NOT_AVAILABLE
+        assert row["local_path"] is None
+        assert row["file_size"] is None
+        assert row["checksum"] is None
+        assert repository.run_summary(run_id)["successful"] == 1
+        assert verify_run(repository, storage, run_id, full_checksum=True).valid
 
 
 def test_verify_marks_missing_file_failed(app_config, logger) -> None:

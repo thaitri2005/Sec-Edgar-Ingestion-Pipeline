@@ -24,6 +24,13 @@ class ValidationResult:
     error: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PrimaryDocumentMetadata:
+    filename: str
+    report_date: str | None
+    is_html: bool
+
+
 def normalize_cik(value: str | int) -> str:
     text = str(value).strip()
     if not text.isdigit() or len(text) > 10:
@@ -78,10 +85,19 @@ def validate_artifact(
             html_prefix = html_prefix[3:].lstrip()
         if html_prefix.startswith(b"<document>"):
             return ValidationResult(False, "Primary HTML still has an SEC document wrapper")
-        if not html_prefix.startswith(
-            (b"<!doctype", b"<html", b"<ix:html", b"<?xml", b"<!--")
-        ):
-            return ValidationResult(False, "Primary document does not begin like HTML")
+        if not html_prefix.startswith((b"<!doctype", b"<?xml", b"<!--")):
+            tag = re.match(rb"<([a-z][a-z0-9:-]*)(?:\s|/?>)", html_prefix)
+            if tag is None:
+                return ValidationResult(False, "Primary document does not begin with an HTML tag")
+            if tag.group(1) in {
+                b"sec-document",
+                b"text",
+                b"type",
+                b"sequence",
+                b"filename",
+                b"description",
+            }:
+                return ValidationResult(False, "Primary HTML begins with an SEC SGML tag")
 
     return ValidationResult(True)
 
@@ -104,8 +120,9 @@ def extract_submission_metadata(
     storage: StorageBackend,
     txt_path: PurePosixPath,
     filing_type: str,
-) -> tuple[str, str | None]:
+) -> PrimaryDocumentMetadata:
     exact_filename: str | None = None
+    fallback_html_filename: str | None = None
     fallback_filename: str | None = None
     report_date: str | None = None
     current_type: str | None = None
@@ -125,14 +142,18 @@ def extract_submission_metadata(
             filename_value = _tag_value(line, b"FILENAME")
             if filename_value:
                 safe_name = PurePath(filename_value).name
+                fallback_filename = fallback_filename or safe_name
                 if safe_name.lower().endswith((".htm", ".html")):
-                    fallback_filename = fallback_filename or safe_name
-                    if current_type == filing_type.upper():
-                        exact_filename = safe_name
-                        break
+                    fallback_html_filename = fallback_html_filename or safe_name
+                if current_type == filing_type.upper() and exact_filename is None:
+                    exact_filename = safe_name
 
-    primary_filename = exact_filename or fallback_filename
+    primary_filename = exact_filename or fallback_html_filename or fallback_filename
     if primary_filename is None:
-        raise ValueError("No primary HTML document found in complete submission TXT")
-    return primary_filename, report_date
+        raise ValueError("No primary document found in complete submission TXT")
+    return PrimaryDocumentMetadata(
+        filename=primary_filename,
+        report_date=report_date,
+        is_html=primary_filename.lower().endswith((".htm", ".html")),
+    )
 

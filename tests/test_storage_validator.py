@@ -40,10 +40,10 @@ def test_storage_paths_and_submission_parsing(tmp_path) -> None:
     assert path == PurePosixPath("raw/10-K/0000320193/2023/0000320193-23-000106.txt")
     assert stored.file_size > 0
     assert validate_artifact(storage, path, ArtifactKind.TXT, ACCESSION).valid
-    assert extract_submission_metadata(storage, path, "10-K") == (
-        "aapl-20230930.htm",
-        "2023-09-30",
-    )
+    primary = extract_submission_metadata(storage, path, "10-K")
+    assert primary.filename == "aapl-20230930.htm"
+    assert primary.report_date == "2023-09-30"
+    assert primary.is_html
 
 
 def test_validator_rejects_sec_block_page(tmp_path) -> None:
@@ -74,6 +74,20 @@ def test_validator_rejects_wrapped_html(tmp_path) -> None:
 
     assert not result.valid
     assert "wrapper" in result.error.lower()
+
+
+def test_validator_accepts_legacy_html_fragment(tmp_path) -> None:
+    storage = LocalStorageBackend(tmp_path)
+    path = PurePosixPath("raw/10-K/0000320193/2023/example.htm")
+    storage.write_atomic(
+        path,
+        (b'<P STYLE="text-align:center">Legacy filing</P>',),
+        "sha256",
+    )
+
+    result = validate_artifact(storage, path, ArtifactKind.HTML, ACCESSION)
+
+    assert result.valid
 
 
 def test_normalize_cik() -> None:

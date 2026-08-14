@@ -242,12 +242,15 @@ For each filing:
    HTML filename whose `<TYPE>` matches the actual form.
 5. Fall back to the first HTML filename only if there is no exact form match.
 6. Build the primary-document URL from the filing index directory.
-7. Reuse a valid existing HTML when possible; otherwise download it. Some older
+7. If the primary filename is text-only, record HTML as `NOT_AVAILABLE` and
+   retain the valid complete-submission TXT; this is a successful filing state.
+8. Reuse a valid existing HTML when possible; otherwise download it. Some older
    SEC primary-document responses retain an SGML `<DOCUMENT>` wrapper; in that
    case, stream only the content inside `<TEXT>...</TEXT>` to the `.htm` file.
-8. Validate that the HTML is nonempty, begins like HTML rather than SEC SGML,
-   and is not a known SEC block page.
-9. Mark the filing `SUCCESS` only when both artifacts are successful.
+9. Validate that HTML is nonempty, begins with an HTML tag or fragment rather
+   than SEC SGML, and is not a known SEC block page.
+10. Mark the filing `SUCCESS` when TXT succeeds and HTML is either `SUCCESS` or
+    legitimately `NOT_AVAILABLE`.
 
 ### TXT use for NLP
 
@@ -335,12 +338,16 @@ The database is `SEC_DATA/metadata/metadata.db`.
 | `run_targets` | Exact selected CIKs, or discovered matching CIKs in all-company mode. |
 | `run_filings` | Stable run membership, ordinal, and batch number. |
 
-Filing and artifact statuses are:
+Filing statuses are:
 
 ```text
 PENDING -> RUNNING -> SUCCESS
                    `-> FAILED
 ```
+
+Artifacts use the same states plus `NOT_AVAILABLE`. That state applies only to
+the HTML artifact when SEC identifies the primary filing document as text-only;
+it is not a download failure and has no local HTML path, size, or checksum.
 
 Run statuses are:
 

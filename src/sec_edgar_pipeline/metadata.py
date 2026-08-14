@@ -376,12 +376,10 @@ class MetadataRepository:
 
     def save_download_result(self, result: FilingDownloadResult) -> None:
         now = utc_now()
-        artifact_statuses = []
         retry_count = 0
         errors: list[str] = []
         with self.connection:
             for artifact in result.artifacts:
-                artifact_statuses.append(artifact.status)
                 retry_count += artifact.retry_count
                 if artifact.error:
                     errors.append(f"{artifact.kind}: {artifact.error}")
@@ -420,10 +418,14 @@ class MetadataRepository:
                     ),
                 )
 
+            artifact_status_by_kind = {
+                artifact.kind: artifact.status for artifact in result.artifacts
+            }
             filing_status = (
                 Status.SUCCESS
-                if len(artifact_statuses) == 2
-                and all(status == Status.SUCCESS for status in artifact_statuses)
+                if artifact_status_by_kind.get(ArtifactKind.TXT) == Status.SUCCESS
+                and artifact_status_by_kind.get(ArtifactKind.HTML)
+                in {Status.SUCCESS, Status.NOT_AVAILABLE}
                 else Status.FAILED
             )
             if result.error:

@@ -123,32 +123,57 @@ class FilingDownloader:
         html_result: ArtifactResult
         if txt_result.status == Status.SUCCESS:
             try:
-                primary_filename, parsed_report_date = extract_submission_metadata(
+                primary = extract_submission_metadata(
                     self.storage,
                     txt_path,
                     filing_type,
                 )
-                report_date = report_date or parsed_report_date
+                primary_filename = primary.filename
+                report_date = report_date or primary.report_date
                 # The quarterly master index points the complete submission TXT at
                 # /data/{cik}/{accession}.txt, while filing documents live under
                 # /data/{cik}/{accession-without-dashes}/.  The filing index URL is
                 # already rooted in that document directory.
                 html_url = str(item["filing_url"]).rsplit("/", 1)[0]
                 html_url = f"{html_url}/{primary_filename}"
-                html_path = self.storage.artifact_path(
-                    base_form, cik, filing_year, accession, ArtifactKind.HTML
-                )
-                html_result = self._reuse_or_download(
-                    item=item,
-                    kind=ArtifactKind.HTML,
-                    relative_path=html_path,
-                    url=html_url,
-                    source_filename=primary_filename,
-                    prior_size=item.get("html_file_size"),
-                    prior_checksum=item.get("html_checksum"),
-                    run_id=run_id,
-                    batch_number=batch_number,
-                )
+                if primary.is_html:
+                    html_path = self.storage.artifact_path(
+                        base_form, cik, filing_year, accession, ArtifactKind.HTML
+                    )
+                    html_result = self._reuse_or_download(
+                        item=item,
+                        kind=ArtifactKind.HTML,
+                        relative_path=html_path,
+                        url=html_url,
+                        source_filename=primary_filename,
+                        prior_size=item.get("html_file_size"),
+                        prior_checksum=item.get("html_checksum"),
+                        run_id=run_id,
+                        batch_number=batch_number,
+                    )
+                else:
+                    html_result = ArtifactResult(
+                        kind=ArtifactKind.HTML,
+                        status=Status.NOT_AVAILABLE,
+                        source_filename=primary_filename,
+                        url=html_url,
+                        local_path=None,
+                        file_size=None,
+                        checksum=None,
+                        retry_count=0,
+                    )
+                    log_event(
+                        self.logger,
+                        logging.INFO,
+                        "primary_html_not_available",
+                        f"Primary document is text-only for {accession}",
+                        run_id=run_id,
+                        batch_id=batch_number,
+                        accession=accession,
+                        cik=cik,
+                        source_filename=primary_filename,
+                        status=Status.NOT_AVAILABLE,
+                    )
             except Exception as error:
                 html_result = self._existing_html_or_failure(item, error, base_form, filing_year)
         else:
@@ -159,7 +184,10 @@ class FilingDownloader:
                 filing_year,
             )
 
-        success = txt_result.status == Status.SUCCESS and html_result.status == Status.SUCCESS
+        success = txt_result.status == Status.SUCCESS and html_result.status in {
+            Status.SUCCESS,
+            Status.NOT_AVAILABLE,
+        }
         duration = time.monotonic() - started_at
         level = logging.INFO if success else logging.ERROR
         log_event(
@@ -433,6 +461,8 @@ class DownloadService:
         item_iterator = iter(items)
         pending: dict[Future[FilingDownloadResult], dict[str, Any]] = {}
         completed = 0
+        successful = 0
+        failed = 0
         executor = ThreadPoolExecutor(max_workers=self.config.download.max_workers)
 
         def submit_next() -> bool:
@@ -465,6 +495,10 @@ class DownloadService:
                         result = self._unexpected_failure(item, error)
                     self.repository.save_download_result(result)
                     completed += 1
+                    if result.error is None:
+                        successful += 1
+                    else:
+                        failed += 1
                     if (
                         completed % self.config.logging.progress_every == 0
                         or completed == len(items)
@@ -475,11 +509,14 @@ class DownloadService:
                             "batch_progress",
                             f"Collecting {item['base_form']} (+{item['base_form']}/A): "
                             f"batch {batch_index}/{total_batches}, "
-                            f"completed {completed:,}/{len(items):,}",
+                            f"processed {completed:,}/{len(items):,}, "
+                            f"successful {successful:,}, failed {failed:,}",
                             run_id=run_id,
                             batch_id=batch_number,
                             completed=completed,
                             batch_total=len(items),
+                            successful=successful,
+                            failed=failed,
                         )
                     submit_next()
         except KeyboardInterrupt:

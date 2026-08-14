@@ -58,6 +58,16 @@ def verify_run(
             if not row["kind"]:
                 continue
             kind = ArtifactKind(str(row["kind"]))
+            if kind == ArtifactKind.HTML and row["artifact_status"] == Status.NOT_AVAILABLE:
+                if row["local_path"] or row["file_size"] is not None or row["checksum"]:
+                    filing_issues.append(
+                        VerificationIssue(
+                            accession,
+                            kind,
+                            "Unavailable HTML artifact unexpectedly has local file metadata",
+                        )
+                    )
+                continue
             if row["artifact_status"] != Status.SUCCESS:
                 filing_issues.append(
                     VerificationIssue(accession, kind, f"Artifact status is {row['artifact_status']}")
