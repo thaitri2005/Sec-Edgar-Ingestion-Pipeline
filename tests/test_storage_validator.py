@@ -61,6 +61,25 @@ def test_validator_rejects_sec_block_page(tmp_path) -> None:
     assert "block" in result.error.lower()
 
 
+def test_validator_accepts_access_denied_phrase_inside_submission(tmp_path) -> None:
+    storage = LocalStorageBackend(tmp_path)
+    path = PurePosixPath("raw/10-K/0000320193/2023/example.txt")
+    storage.write_atomic(
+        path,
+        (
+            (
+                f"<SEC-DOCUMENT>{ACCESSION}.txt\n<DOCUMENT>\n"
+                "<TEXT>Customers may receive an access denied message.</TEXT>"
+            ).encode(),
+        ),
+        "sha256",
+    )
+
+    result = validate_artifact(storage, path, ArtifactKind.TXT, ACCESSION)
+
+    assert result.valid
+
+
 def test_validator_rejects_wrapped_html(tmp_path) -> None:
     storage = LocalStorageBackend(tmp_path)
     path = PurePosixPath("raw/10-K/0000320193/2023/example.htm")

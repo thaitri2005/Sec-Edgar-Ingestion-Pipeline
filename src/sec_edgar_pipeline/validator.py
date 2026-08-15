@@ -13,7 +13,6 @@ ACCESSION_PATTERN = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 BLOCK_PAGE_MARKERS = (
     b"your request originates from an undeclared automated tool",
     b"request rate threshold exceeded",
-    b"access denied",
     b"sec.gov | your request has been blocked",
 )
 LEADING_HTML_ENTITY_PATTERN = re.compile(
