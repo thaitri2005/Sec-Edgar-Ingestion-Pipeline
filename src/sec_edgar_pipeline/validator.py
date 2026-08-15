@@ -16,6 +16,10 @@ BLOCK_PAGE_MARKERS = (
     b"access denied",
     b"sec.gov | your request has been blocked",
 )
+LEADING_HTML_ENTITY_PATTERN = re.compile(
+    rb"(?:&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);\s*)+",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +87,7 @@ def validate_artifact(
         html_prefix = prefix.lstrip()
         if html_prefix.startswith(b"\xef\xbb\xbf"):
             html_prefix = html_prefix[3:].lstrip()
+        html_prefix = LEADING_HTML_ENTITY_PATTERN.sub(b"", html_prefix, count=1).lstrip()
         if html_prefix.startswith(b"<document>"):
             return ValidationResult(False, "Primary HTML still has an SEC document wrapper")
         if not html_prefix.startswith((b"<!doctype", b"<?xml", b"<!--")):

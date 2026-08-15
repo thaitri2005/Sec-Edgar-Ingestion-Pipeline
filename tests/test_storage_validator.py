@@ -90,6 +90,20 @@ def test_validator_accepts_legacy_html_fragment(tmp_path) -> None:
     assert result.valid
 
 
+def test_validator_accepts_html_after_leading_character_entity(tmp_path) -> None:
+    storage = LocalStorageBackend(tmp_path)
+    path = PurePosixPath("raw/10-K/0000320193/2023/example.htm")
+    storage.write_atomic(
+        path,
+        (b"&#39;<HTML><BODY>Annual report</BODY></HTML>",),
+        "sha256",
+    )
+
+    result = validate_artifact(storage, path, ArtifactKind.HTML, ACCESSION)
+
+    assert result.valid
+
+
 def test_normalize_cik() -> None:
     assert normalize_cik("320193") == "0000320193"
 
