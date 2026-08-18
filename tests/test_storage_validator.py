@@ -123,6 +123,56 @@ def test_validator_accepts_html_after_leading_character_entity(tmp_path) -> None
     assert result.valid
 
 
+def test_validator_accepts_bounded_legacy_html_preambles(tmp_path) -> None:
+    storage = LocalStorageBackend(tmp_path)
+    payloads = (
+        b"\\\n<HTML><BODY>Annual report</BODY></HTML>",
+        b"f<HTML><BODY>Annual report</BODY></HTML>",
+        b"tml>\n<head><title>Annual report</title></head>",
+        b"</HEAD><BODY>Annual report</BODY>",
+        b"</P><P>Annual report</P>",
+        b"2\n<!doctype html><HTML><BODY>Annual report</BODY></HTML>",
+        b"???<?xml version='1.0'?><html><body>Annual report</body></html>",
+    )
+
+    for index, payload in enumerate(payloads):
+        path = PurePosixPath(f"raw/10-Q/0000320193/2023/example-{index}.htm")
+        storage.write_atomic(path, (payload,), "sha256")
+        assert validate_artifact(storage, path, ArtifactKind.HTML, ACCESSION).valid
+
+
+def test_validator_rejects_unbounded_non_html_preamble(tmp_path) -> None:
+    storage = LocalStorageBackend(tmp_path)
+    path = PurePosixPath("raw/10-Q/0000320193/2023/example.htm")
+    storage.write_atomic(path, (b"x" * 513 + b"<html>Too late</html>",), "sha256")
+
+    result = validate_artifact(storage, path, ArtifactKind.HTML, ACCESSION)
+
+    assert not result.valid
+
+
+def test_submission_metadata_marks_xfdl_primary_as_non_html(tmp_path) -> None:
+    storage = LocalStorageBackend(tmp_path)
+    path = PurePosixPath("raw/10-Q/0000320193/2023/example.txt")
+    payload = f"""<SEC-DOCUMENT>{ACCESSION}.txt
+ACCESSION NUMBER: {ACCESSION}
+<DOCUMENT>
+<TYPE>10-Q
+<FILENAME>legacy-primary.htm
+<TEXT>
+application/x-xfdl;content-encoding="asc-gzip"
+encoded-form-data
+</TEXT>
+</DOCUMENT>
+""".encode()
+    storage.write_atomic(path, (payload,), "sha256")
+
+    primary = extract_submission_metadata(storage, path, "10-Q")
+
+    assert primary.filename == "legacy-primary.htm"
+    assert not primary.is_html
+
+
 def test_normalize_cik() -> None:
     assert normalize_cik("320193") == "0000320193"
 

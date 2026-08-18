@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
@@ -45,6 +46,7 @@ class StorageBackend(Protocol):
 class LocalStorageBackend:
     def __init__(self, root_directory: Path) -> None:
         self.root_directory = root_directory.resolve()
+        self._path_lock = threading.RLock()
 
     def ensure_layout(self) -> None:
         for relative in ("raw", "metadata", "logs", "tmp"):
@@ -68,12 +70,13 @@ class LocalStorageBackend:
         )
 
     def _resolve(self, relative_path: PurePosixPath) -> Path:
-        if relative_path.is_absolute() or ".." in relative_path.parts:
-            raise ValueError(f"Unsafe storage path: {relative_path}")
-        resolved = (self.root_directory / Path(*relative_path.parts)).resolve()
-        if resolved != self.root_directory and self.root_directory not in resolved.parents:
-            raise ValueError(f"Storage path escapes root: {relative_path}")
-        return resolved
+        with self._path_lock:
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                raise ValueError(f"Unsafe storage path: {relative_path}")
+            resolved = (self.root_directory / Path(*relative_path.parts)).resolve()
+            if resolved != self.root_directory and self.root_directory not in resolved.parents:
+                raise ValueError(f"Storage path escapes root: {relative_path}")
+            return resolved
 
     def exists(self, relative_path: PurePosixPath) -> bool:
         return self._resolve(relative_path).is_file()
@@ -87,8 +90,9 @@ class LocalStorageBackend:
         chunks: Iterable[bytes],
         checksum_algorithm: str | None,
     ) -> StoredFile:
-        destination = self._resolve(relative_path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        with self._path_lock:
+            destination = self._resolve(relative_path)
+            destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(destination.name + ".part")
         digest = hashlib.new(checksum_algorithm) if checksum_algorithm else None
         file_size = 0
