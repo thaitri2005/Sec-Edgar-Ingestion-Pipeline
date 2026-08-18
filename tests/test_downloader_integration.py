@@ -29,6 +29,7 @@ class FakeResponse:
 @dataclass
 class FakeClient:
     payloads: dict[str, bytes]
+    missing_status_code: int = 404
 
     def __post_init__(self) -> None:
         self.calls: Counter[str] = Counter()
@@ -36,7 +37,7 @@ class FakeClient:
     def open_stream(self, url: str) -> StreamResponse:
         self.calls[url] += 1
         if url not in self.payloads:
-            raise SecRequestError(f"Missing fixture: {url}", 1, 404)
+            raise SecRequestError(f"Missing fixture: {url}", 1, self.missing_status_code)
         return StreamResponse(FakeResponse(self.payloads[url]), 1)
 
     @staticmethod
@@ -145,7 +146,7 @@ def test_partial_download_retries_only_missing_html(app_config, logger) -> None:
     payloads = fixture_payloads([filing])
     html_url = next(url for url in payloads if url.endswith(".htm"))
     html_payload = payloads.pop(html_url)
-    client = FakeClient(payloads)
+    client = FakeClient(payloads, missing_status_code=503)
 
     with MetadataRepository(app_config.database_path) as repository:
         repository.initialize()
@@ -166,6 +167,34 @@ def test_partial_download_retries_only_missing_html(app_config, logger) -> None:
         assert service.download_run(run_id) == RunStatus.SUCCESS
         assert client.calls[filing.submission_txt_url] == 1
         assert client.calls[html_url] == 2
+
+
+def test_missing_separate_primary_html_is_not_available(app_config, logger) -> None:
+    storage = LocalStorageBackend(app_config.storage.root_directory)
+    storage.ensure_layout()
+    filing = make_filing(9)
+    client = FakeClient({filing.submission_txt_url: txt_payload(filing)})
+
+    with MetadataRepository(app_config.database_path) as repository:
+        repository.initialize()
+        run_id = create_run(repository, app_config, [filing])
+        service = DownloadService(
+            app_config,
+            repository,
+            FilingDownloader(app_config, client, storage, logger),
+            logger,
+        )
+
+        assert service.download_run(run_id) == RunStatus.SUCCESS
+        row = repository.connection.execute(
+            "SELECT status, local_path, file_size, checksum FROM artifacts "
+            "WHERE accession_number = ? AND kind = 'HTML'",
+            (filing.accession_number,),
+        ).fetchone()
+        assert row["status"] == Status.NOT_AVAILABLE
+        assert row["local_path"] is None
+        assert row["file_size"] is None
+        assert row["checksum"] is None
 
 
 def test_wrapped_primary_html_is_stored_as_clean_html(app_config, logger) -> None:

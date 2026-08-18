@@ -313,6 +313,29 @@ class FilingDownloader:
             retry_count = max(0, attempts - 1)
             if isinstance(error, SecRequestError):
                 retry_count = max(0, error.attempts - 1)
+                if kind == ArtifactKind.HTML and error.status_code == 404:
+                    log_event(
+                        self.logger,
+                        logging.INFO,
+                        "primary_html_not_available",
+                        f"Primary HTML is not hosted separately for {item['accession_number']}",
+                        run_id=run_id,
+                        batch_id=batch_number,
+                        accession=item["accession_number"],
+                        cik=item["cik"],
+                        source_filename=source_filename,
+                        status=Status.NOT_AVAILABLE,
+                    )
+                    return ArtifactResult(
+                        kind=kind,
+                        status=Status.NOT_AVAILABLE,
+                        source_filename=source_filename,
+                        url=url,
+                        local_path=None,
+                        file_size=None,
+                        checksum=None,
+                        retry_count=retry_count,
+                    )
             log_event(
                 self.logger,
                 logging.ERROR,
