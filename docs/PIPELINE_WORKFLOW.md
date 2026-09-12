@@ -9,11 +9,10 @@ For installation and configuration basics, see [README.md](../README.md).
 
 ## 1. What the pipeline does
 
-The pipeline discovers SEC EDGAR filings from quarterly `master.idx` files and
-downloads two artifacts for every selected filing:
-
-1. The complete EDGAR submission as TXT.
-2. The primary filing document as HTML.
+The pipeline discovers SEC EDGAR filings from quarterly `master.idx` files. It
+always downloads the complete EDGAR submission as TXT and tracks the primary
+filing document as HTML. HTML is downloaded when SEC publishes it separately or
+recorded as `NOT_AVAILABLE` for legitimate source cases.
 
 It supports these base forms:
 
@@ -38,7 +37,7 @@ file. SQLite and the individual raw artifacts are the outputs.
 | Actual form | The filed type, including `/A` when the filing is an amendment. |
 | Filing year | The year in `filing_date`, which controls discovery and the storage path. |
 | Run | One form, year range, and CIK-selection fingerprint recorded in SQLite. |
-| Artifact | One required file for a filing: `TXT` or `HTML`. |
+| Artifact | One tracked filing output: required `TXT` or conditionally available `HTML`. |
 | Batch | A stable group of discovered filings processed sequentially. |
 
 The `--start-year` and `--end-year` options filter by the year the filing was
@@ -76,7 +75,7 @@ Process batches sequentially
     |    Parse report date and primary HTML filename
     |        |
     |        v
-    +--> Download/reuse primary HTML
+    +--> Download/reuse primary HTML, or record NOT_AVAILABLE
              |
              v
        Validate files and atomically store them
@@ -119,8 +118,15 @@ Before live access, replace the example user agent with a real organization or
 operator name and contact email. `SEC_USER_AGENT` overrides the YAML value when
 set in the environment.
 
-Relative paths are resolved from the directory containing the YAML file. With
-the example above, the data root is `SEC_DATA` at the repository root.
+Relative paths are resolved from the directory containing the YAML file. On the
+current workstation, `configs/config.yaml` is under `D:\Seed Grant Project`, so
+`root_directory: ../SEC_DATA` resolves to
+`D:\Seed Grant Project\SEC_DATA`.
+
+The checked-in defaults and `configs/config.example.yaml` use three workers and
+a 0.35-second request delay. The current private production profile uses five
+workers and a 0.20-second delay. Requests still pass through one shared global
+limiter, so worker count does not bypass the configured SEC request rate.
 
 Configuration validation rejects:
 
@@ -244,12 +250,14 @@ For each filing:
 6. Build the primary-document URL from the filing index directory.
 7. If the primary filename is text-only, record HTML as `NOT_AVAILABLE` and
    retain the valid complete-submission TXT; this is a successful filing state.
-8. Reuse a valid existing HTML when possible; otherwise download it. Some older
+8. If a separately referenced primary HTML URL returns HTTP 404, record HTML as
+   `NOT_AVAILABLE`; a valid TXT still allows the filing to succeed.
+9. Reuse a valid existing HTML when possible; otherwise download it. Some older
    SEC primary-document responses retain an SGML `<DOCUMENT>` wrapper; in that
    case, stream only the content inside `<TEXT>...</TEXT>` to the `.htm` file.
-9. Validate that HTML is nonempty, begins with an HTML tag or fragment rather
-   than SEC SGML, and is not a known SEC block page.
-10. Mark the filing `SUCCESS` when TXT succeeds and HTML is either `SUCCESS` or
+10. Validate that HTML is nonempty, begins with an HTML tag or fragment rather
+    than SEC SGML, and is not a known SEC block page.
+11. Mark the filing `SUCCESS` when TXT succeeds and HTML is either `SUCCESS` or
     legitimately `NOT_AVAILABLE`.
 
 ### TXT use for NLP
@@ -295,8 +303,9 @@ The client retries:
 - HTTP 5xx responses.
 
 Retries use exponential backoff with jitter. A valid `Retry-After` header takes
-precedence. HTTP 404 is treated as a non-retryable error because it normally
-indicates a bad URL or unavailable resource.
+precedence. A 404 from a separately referenced primary HTML document becomes
+the valid `NOT_AVAILABLE` artifact state. Other HTTP 404 responses are
+non-retryable because they normally indicate a bad URL or unavailable resource.
 
 The default `0.35` second interval is approximately 2.86 requests per second,
 below the SEC ceiling. Do not reduce it aggressively for production runs.
@@ -320,6 +329,9 @@ SEC_DATA/
 |   `-- pipeline.jsonl
 `-- tmp/
 ```
+
+On the current workstation, this root is
+`D:\Seed Grant Project\SEC_DATA`.
 
 Amendments use the base-form directory. Raw filings are never concatenated, and
 the batch number does not affect their location.
@@ -346,8 +358,9 @@ PENDING -> RUNNING -> SUCCESS
 ```
 
 Artifacts use the same states plus `NOT_AVAILABLE`. That state applies only to
-the HTML artifact when SEC identifies the primary filing document as text-only;
-it is not a download failure and has no local HTML path, size, or checksum.
+the HTML artifact when SEC identifies the primary filing document as text-only
+or its separately referenced primary HTML URL returns 404. It is not a download
+failure and has no local HTML path, size, or checksum.
 
 Run statuses are:
 
@@ -356,7 +369,7 @@ Run statuses are:
 | `DISCOVERING` | Quarterly index discovery is incomplete or resumable. |
 | `PENDING` | Discovery completed; downloads have not completed. |
 | `RUNNING` | Download processing is active or was not shut down cleanly. |
-| `SUCCESS` | Every filing in the run has both valid artifacts. |
+| `SUCCESS` | Every filing has valid TXT and HTML is `SUCCESS` or legitimately `NOT_AVAILABLE`. |
 | `PARTIAL` | Downloading ended but at least one filing is incomplete or failed. |
 | `INTERRUPTED` | User interruption or an unexpected service-level failure occurred. |
 | `FAILED` | Reserved run state; normal incomplete downloads currently finish as `PARTIAL`. |
@@ -544,9 +557,19 @@ normalization, storage validation, SEC retry behavior, batching, duplicate
 avoidance, partial artifact reuse, interrupted-run recovery, and verification.
 It uses mocked SEC responses and temporary SQLite/storage directories.
 
-The pipeline has also completed a small live SEC pilot. It has not yet completed
-a full multi-year all-company run, a high-volume load test, or a multi-day soak
-test. Treat the first large run as a monitored production pilot:
+The pipeline has completed the following large all-company downloads on the
+current workstation:
+
+| Run | Selection | Discovered | Successful | Failed | Final status |
+| --- | --- | ---: | ---: | ---: | --- |
+| 2 | 10-K, 2009–2025 | 149,158 | 149,157 | 1 | `PARTIAL` |
+| 4 | 10-Q, 2009–2025 | 375,990 | 375,989 | 1 | `PARTIAL` |
+| 6 | 8-K, 2018–2025 | 560,166 | 560,166 | 0 | `SUCCESS` |
+
+That is 1,085,312 successful filings out of 1,085,314 discovered. The two
+`PARTIAL` runs each retain one unresolved source edge case after retries; the
+successful artifacts remain usable. Treat a new form/range or a material
+pipeline change as a monitored production change:
 
 - inspect statistics after discovery;
 - monitor logs and disk consumption;
@@ -575,3 +598,42 @@ test. Treat the first large run as a monitored production pilot:
 - Use `verify --mark-failed` only when repair is intended.
 - Back up `metadata.db` after a major completed run.
 - Preserve the JSONL logs needed for audit or diagnosis.
+
+## 20. Planned companion: Vietnam annual-report NLP pipeline
+
+Everything above describes the implemented SEC EDGAR pipeline. A separate
+Vietnamese annual-report pipeline is planned beneath it, but no corresponding
+commands or database migrations have been implemented yet.
+
+The companion design deliberately reuses the operational principles that have
+worked for SEC ingestion:
+
+- immutable raw source artifacts;
+- SQLite as the checkpoint and provenance source of truth;
+- stable run membership and batches;
+- streaming/resumable downloads and atomic finalization;
+- SHA-256 validation;
+- stage-specific status, verification, and failed-only retry; and
+- versioned, reproducible downstream transformations.
+
+The data model remains separate because the Vietnamese source consists of PDFs
+identified by dataset records, tickers, and report years—not SEC CIKs,
+accessions, forms, complete-submission TXT, and primary HTML.
+
+The fixed initial scope is:
+
+| Property | Value |
+| --- | --- |
+| Source | Zenodo record `20949551` |
+| Dataset version | `1.0.0` |
+| Report years | 2008–2025 inclusive |
+| Expected reports | 13,884 PDFs |
+| Source download | Four archives, approximately 134.7 GB |
+| NLP outputs | Page JSONL and document TXT |
+| OCR | Selective Vietnamese/English OCR for low-quality pages |
+| Live exchange collection | Deferred |
+| Runtime root on this workstation | `D:\Seed Grant Project\VN_DATA` |
+
+See [VIETNAM_ANNUAL_REPORT_PIPELINE.md](VIETNAM_ANNUAL_REPORT_PIPELINE.md) for
+the full proposed data flow, CLI, configuration, storage layout, SQLite schema,
+PDF/OCR quality model, recovery rules, pilot procedure, and production plan.

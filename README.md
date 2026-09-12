@@ -1,12 +1,51 @@
 # SEC EDGAR Local Ingestion Pipeline
 
-Fault-tolerant local acquisition of SEC EDGAR `10-K`, `10-Q`, and `8-K` filings. Selecting a base form automatically includes its amendment form (`/A`). The pipeline stores the complete submission TXT and actual primary HTML document for every filing.
+Fault-tolerant local acquisition of SEC EDGAR `10-K`, `10-Q`, and `8-K` filings. Selecting a base form automatically includes its amendment form (`/A`). The pipeline stores the complete submission TXT and the separately hosted primary HTML document when SEC provides one. Legitimately unavailable primary HTML is recorded explicitly rather than treated as a failed filing.
 
 The original `Data_Collection_Method.ipynb` remains a reference and is not used at runtime.
 
 For the complete implemented data flow, status model, production procedure,
 recovery playbooks, and maintenance checklist, see
 [`docs/PIPELINE_WORKFLOW.md`](docs/PIPELINE_WORKFLOW.md).
+
+## Planned Companion Dataset: Vietnam Annual Reports
+
+A separate companion pipeline is planned for Vietnamese listed-company annual
+reports used in NLP research. Its fixed initial scope is report years
+`2008–2025`, using version `1.0.0` of the Zenodo *Vietnam Listed Companies
+Annual Reports PDF Dataset* (`13,884` selected PDFs). Live HSX/HNX collection is
+explicitly deferred.
+
+The Vietnamese pipeline will preserve immutable source PDFs and create
+page-level JSONL plus document-level UTF-8 TXT. It will use a separate `VN_DATA`
+root and SQLite database because ticker/source-record identity, PDF processing,
+OCR, and stage-level recovery do not fit the SEC accession-based schema.
+
+This pipeline is a documented design and is **not implemented yet**. See
+[`docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md`](docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md)
+for the proposed workflow, storage layout, schema, extraction strategy, pilot,
+and production procedure. Track the ordered engineering phases and acceptance
+gates in
+[`docs/VIETNAM_IMPLEMENTATION_PLAN.md`](docs/VIETNAM_IMPLEMENTATION_PLAN.md).
+
+## Current Windows Workspace
+
+The canonical project location on the current workstation is:
+
+```text
+D:\Seed Grant Project\
+|-- SEC_DATA\    # implemented SEC runtime data
+|-- VN_DATA\     # planned Vietnamese annual-report runtime data
+|-- configs\
+|-- docs\
+`-- src\
+```
+
+Both data roots remain under the base folder but outside version control. With
+configuration files under `D:\Seed Grant Project\configs`, the relative values
+`../SEC_DATA` and `../VN_DATA` resolve to the two paths shown above. Keeping the
+configuration relative preserves the layout if the whole base folder is moved
+again.
 
 ## Features
 
@@ -41,7 +80,7 @@ Edit `configs/config.yaml`:
 
 ```yaml
 storage:
-  root_directory: D:/SEC_DATA
+  root_directory: ../SEC_DATA
 
 download:
   max_workers: 3
@@ -63,6 +102,11 @@ sec:
 ```
 
 Relative paths are resolved from the configuration file directory. `SEC_USER_AGENT` overrides the YAML user agent and is recommended for server deployment. The program rejects request delays below 0.1 seconds so the process cannot exceed the SEC's published ten-request-per-second ceiling.
+
+The checked-in example and code defaults use three workers with a 0.35-second
+global request interval. The current private workstation configuration uses five
+workers and a 0.20-second global interval. Worker count does not create a
+separate rate limit per worker; every worker shares the same limiter.
 
 The CIK CSV must contain a `cik` header. CIKs are validated, zero-padded to ten digits, and deduplicated before discovery.
 
@@ -147,7 +191,10 @@ JOIN artifacts AS a USING (accession_number)
 WHERE f.accession_number = '0000320193-24-000123';
 ```
 
-Filing status becomes `SUCCESS` only when both required artifacts validate and their metadata commits. Valid partial artifacts are preserved across retries.
+Filing status becomes `SUCCESS` when TXT validates and HTML either validates or
+is legitimately `NOT_AVAILABLE`. HTML receives `NOT_AVAILABLE` for text-only
+primary documents and for a separately referenced primary HTML file that SEC
+returns as HTTP 404. Valid partial artifacts are preserved across retries.
 
 ## Logging
 

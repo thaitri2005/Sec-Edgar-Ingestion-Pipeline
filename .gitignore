@@ -10,6 +10,7 @@ build/
 dist/
 
 SEC_DATA/
+VN_DATA/
 logs/
 *.db
 *.db-shm

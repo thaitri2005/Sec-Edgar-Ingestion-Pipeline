@@ -1,10 +1,21 @@
-# SEC EDGAR Local Ingestion Pipeline
+# Data Ingestion Pipelines Implementation Plan
+
+Last updated: 2026-09-13
+
+## Project Status
+
+| Pipeline | Scope | Status | Detailed documentation |
+| --- | --- | --- | --- |
+| SEC EDGAR | 10-K/10-Q for 2009–2025; 8-K for 2018–2025 | Implemented and operational | [SEC workflow](docs/PIPELINE_WORKFLOW.md) |
+| Vietnam annual reports | Historical reports for 2008–2025 | Planned; implementation not started | [Vietnam implementation plan](docs/VIETNAM_IMPLEMENTATION_PLAN.md) |
+
+## SEC EDGAR Pipeline
 
 ## Summary
 
 - Replace the notebook workflow with a modular, installable Python application while leaving `Data_Collection_Method.ipynb` unchanged as reference only.
 - Preserve quarterly discovery, 10,000-filing chunks, three-worker parallelism, automatic batch iteration, and resumability.
-- Store raw HTML and TXT filings by form, CIK, year, and accession without concatenating raw files.
+- Store raw TXT and, when available, primary HTML by form, CIK, year, and accession without concatenating raw files.
 - Use SQLite as the sole metadata and checkpoint source.
 
 ## Application Interface
@@ -19,7 +30,7 @@
 
 - Use an installable package under `src/sec_edgar_pipeline/` with separate configuration, HTTP, discovery, downloading, storage, metadata, validation, checkpoint, logging, and CLI modules.
 - Stream and filter quarterly `master.idx` records, persist stable run order and batch numbers, then process every batch automatically.
-- Download complete submission TXT files, identify the primary filing document, and download the actual HTML document.
+- Download complete submission TXT files, identify the primary filing document, and download the separately hosted HTML document when available.
 - Store files under `SEC_DATA/raw/{base_form}/{cik}/{filing_year}/{accession}.{txt,htm}` using atomic temporary files.
 - Isolate filesystem operations behind a storage backend protocol for future cloud implementations.
 
@@ -27,7 +38,7 @@
 
 - Store metadata in `SEC_DATA/metadata/metadata.db` using WAL mode, foreign keys, versioned schema setup, and indexes.
 - Maintain companies, filings, artifacts, runs, run targets, and run filings.
-- Use `PENDING`, `RUNNING`, `SUCCESS`, and `FAILED` statuses; filing success requires both valid artifacts.
+- Use `PENDING`, `RUNNING`, `SUCCESS`, and `FAILED` statuses plus artifact-level `NOT_AVAILABLE`; filing success requires valid TXT and HTML that is either valid or legitimately unavailable.
 - Recover stale running work, preserve valid partial downloads, and retry only missing or invalid artifacts.
 - Apply thread-safe rate limiting, bounded retries, exponential backoff, atomic writes, SHA-256 checksums, and content validation.
 - Keep SQLite as the only checkpoint and metadata source; do not create batch CSV merge files.
@@ -46,3 +57,55 @@
 - The default start year is 2009 and the end year is configurable.
 - Amendment filings retain their actual form in metadata but share their base-form storage directory.
 - Existing notebook/cloud outputs are not imported in the initial implementation.
+
+## Current Workstation Layout
+
+- Treat `D:\Seed Grant Project` as the canonical base folder.
+- Resolve `configs/config.yaml` value `../SEC_DATA` to
+  `D:\Seed Grant Project\SEC_DATA`.
+- Resolve the planned `configs/vn_reports.yaml` value `../VN_DATA` to
+  `D:\Seed Grant Project\VN_DATA`.
+- Keep both runtime roots ignored by Git while retaining them under the same
+  movable base folder as the code and documentation.
+
+## Planned Companion Pipeline: Vietnam Annual Reports
+
+This is a separate future implementation, not an extension of the SEC database
+schema and not currently exposed by the `sec-edgar` CLI.
+
+- Use version `1.0.0` of the Zenodo *Vietnam Listed Companies Annual Reports
+  PDF Dataset* (`10.5281/zenodo.20949551`) as the fixed historical source.
+- Select report years 2008–2025 inclusive: 13,884 expected PDFs contained in
+  four archives totaling approximately 134.7 GB.
+- Defer live HSX/HNX/UPCoM discovery and post-2025 updates.
+- Preserve original PDFs unchanged and create page-level JSONL plus
+  document-level UTF-8 TXT for NLP.
+- Extract native PDF text first and selectively OCR only empty or low-quality
+  pages with Vietnamese and English language support.
+- Use a separate `VN_DATA` root, SQLite database, configuration, package
+  namespace, and proposed `vn-reports` CLI.
+- Track catalog, download, extraction, OCR, and normalization stages
+  independently so each stage can resume and retry without invalidating valid
+  upstream artifacts.
+- Pin dataset, code, extraction, OCR, and normalization versions for research
+  reproducibility.
+
+The proposed architecture, schema, storage layout, quality controls, and
+operating model are documented in
+[`docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md`](docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md).
+The ordered phases, checklists, dependencies, verification gates, pilot, and
+production acceptance criteria are maintained in
+[`docs/VIETNAM_IMPLEMENTATION_PLAN.md`](docs/VIETNAM_IMPLEMENTATION_PLAN.md).
+
+Current Vietnam milestone status: all implementation phases are `Not started`.
+The next step is Phase 0 source/environment preflight; downloading the four
+large archives must wait until that gate passes.
+
+## Plan Maintenance
+
+- Update this project-level status whenever a pipeline or major milestone moves
+  between planned, in-progress, operational, or deferred states.
+- Maintain detailed phase status in the pipeline-specific implementation plan.
+- Update workflow documentation and operator instructions in the same commit as
+  behavior, configuration, schema, storage, or command changes.
+- Do not mark work complete until its documented verification gate passes.
