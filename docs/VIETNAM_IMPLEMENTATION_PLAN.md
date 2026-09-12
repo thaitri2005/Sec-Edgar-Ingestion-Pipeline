@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Planned; implementation has not started |
+| Status | Implemented; live catalog validated, archive/PDF pilot pending |
 | Last updated | 2026-09-13 |
 | Canonical project root | `D:\Seed Grant Project` |
 | Runtime data root | `D:\Seed Grant Project\VN_DATA` |
@@ -12,10 +12,11 @@
 | Dataset | Zenodo record `20949551`, version `1.0.0` |
 | Expected source reports | 13,884 PDFs |
 
-This plan turns the architecture in
+This plan tracks implementation and production acceptance for the architecture in
 [VIETNAM_ANNUAL_REPORT_PIPELINE.md](VIETNAM_ANNUAL_REPORT_PIPELINE.md) into
-ordered implementation work. Checkboxes describe repository state, not whether
-the source dataset itself exists.
+ordered implementation work. The status table is authoritative for engineering
+progress. Checkboxes remain an acceptance audit and may stay open until a live
+source-data gate is completed.
 
 ## 1. Completion definition
 
@@ -40,22 +41,41 @@ Live exchange crawling and post-2025 updates are outside this milestone.
 
 | Phase | Deliverable | Status | Depends on |
 | --- | --- | --- | --- |
-| 0 | Source, license, and storage preflight | Not started | None |
-| 1 | Package and CLI scaffold | Not started | Phase 0 |
-| 2 | Configuration, storage, and SQLite foundation | Not started | Phase 1 |
-| 3 | Zenodo catalog ingestion | Not started | Phase 2 |
-| 4 | Resumable archive download | Not started | Phase 3 |
-| 5 | Safe PDF extraction and reconciliation | Not started | Phase 4 |
-| 6 | Native PDF text extraction and quality scoring | Not started | Phase 5 |
-| 7 | Selective Vietnamese/English OCR | Not started | Phase 6 |
-| 8 | Versioned text normalization | Not started | Phases 6–7 |
-| 9 | Operations, verification, and recovery commands | Not started | Phases 3–8 |
-| 10 | Automated test suite and documentation | Not started | Phases 1–9 |
+| 0 | Source, license, and storage preflight | In progress; source/disk verified, anomaly review pending | None |
+| 1 | Package and CLI scaffold | Complete | Phase 0 |
+| 2 | Configuration, storage, and SQLite foundation | Complete | Phase 1 |
+| 3 | Zenodo catalog ingestion | Complete; live run 1 validated | Phase 2 |
+| 4 | Resumable archive download | Live 4.1 GB pilot initialized; operator resume pending | Phase 3 |
+| 5 | Safe PDF extraction and reconciliation | Implemented; live archive pilot pending | Phase 4 |
+| 6 | Native PDF text extraction and quality scoring | Implemented; corpus calibration pending | Phase 5 |
+| 7 | Selective Vietnamese/English OCR | Implemented; OCR smoke test passed | Phase 6 |
+| 8 | Versioned text normalization | Implemented; corpus calibration pending | Phases 6–7 |
+| 9 | Operations, verification, and recovery commands | Complete | Phases 3–8 |
+| 10 | Automated test suite and documentation | In progress; 36 tests pass | Phases 1–9 |
 | 11 | Stratified pilot and threshold calibration | Not started | Phase 10 |
 | 12 | Full historical production run | Not started | Phase 11 |
 
-Only change a phase to `In progress` when repository work has begun. Change it
-to `Complete` only after its verification gate passes.
+### Implementation checkpoint — 2026-09-13
+
+- `src/vn_report_pipeline/` and the `vn-reports` entry point are installed.
+- Run 1 cataloged exactly 13,884 documents, 1,391 tickers, and report years
+  2008–2025 from the live Zenodo metadata; rerunning catalog resumed run 1
+  without duplicate membership.
+- All seven metadata files passed their Zenodo MD5 checks, and archive/PDF
+  SHA-256 values are registered in SQLite.
+- SQLite integrity is `ok`; run 1 is `PENDING` with zero failed documents.
+- The end-to-end PDF-to-page-JSONL-to-normalized-TXT flow passed against a
+  synthetic archive with full checksum verification.
+- PyMuPDF 1.28.2 is installed. Project-local `tessdata_fast` English and
+  Vietnamese models are pinned to commit
+  `87416418657359cb625c412a48b6e1d6d41c29bd`; image-only OCR passed.
+- D: has approximately 10.35 TB free. Reserve at least 400 GB during production
+  for the 134.8 GB archives, approximately 134.4 GB selected PDFs, derived text,
+  temporary files, and safety margin.
+- The 4.1 GB `vn_bctn_2006_2010.zip` pilot has a 150,994,944-byte resumable
+  `.part` file. Deliberate interruption preserved its bytes, HTTP range resume
+  was confirmed, and it is paused for operator-controlled continuation. No
+  other production archive has started.
 
 ## 3. Phase 0 — source and environment preflight
 
@@ -86,7 +106,7 @@ to `Complete` only after its verification gate passes.
 
 ### Work
 
-- [ ] Add a separate package namespace under `src/vn_annual_reports/`.
+- [x] Add a separate package namespace under `src/vn_report_pipeline/`.
 - [ ] Add the `vn-reports` console entry point without changing `sec-edgar`.
 - [ ] Define command shells for `catalog`, `download`, `extract`, `ocr`,
   `normalize`, `stats`, `verify`, and `retry-failed`.

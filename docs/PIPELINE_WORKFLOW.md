@@ -599,11 +599,11 @@ pipeline change as a monitored production change:
 - Back up `metadata.db` after a major completed run.
 - Preserve the JSONL logs needed for audit or diagnosis.
 
-## 20. Planned companion: Vietnam annual-report NLP pipeline
+## 20. Companion: Vietnam annual-report NLP pipeline
 
-Everything above describes the implemented SEC EDGAR pipeline. A separate
-Vietnamese annual-report pipeline is planned beneath it, but no corresponding
-commands or database migrations have been implemented yet.
+Everything above describes the implemented SEC EDGAR pipeline. The separate
+Vietnamese annual-report pipeline now has its own `vn-reports` CLI, package,
+configuration, SQLite schema, and runtime root.
 
 The companion design deliberately reuses the operational principles that have
 worked for SEC ingestion:
@@ -635,5 +635,5 @@ The fixed initial scope is:
 | Runtime root on this workstation | `D:\Seed Grant Project\VN_DATA` |
 
 See [VIETNAM_ANNUAL_REPORT_PIPELINE.md](VIETNAM_ANNUAL_REPORT_PIPELINE.md) for
-the full proposed data flow, CLI, configuration, storage layout, SQLite schema,
+the full data flow, CLI, configuration, storage layout, SQLite schema,
 PDF/OCR quality model, recovery rules, pilot procedure, and production plan.

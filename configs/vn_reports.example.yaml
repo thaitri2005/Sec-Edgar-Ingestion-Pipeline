@@ -1,0 +1,46 @@
+storage:
+  root_directory: ../VN_DATA
+
+dataset:
+  provider: zenodo
+  record_id: "20949551"
+  dataset_version: "1.0.0"
+  start_year: 2008
+  end_year: 2025
+  expected_documents: 13884
+
+download:
+  max_workers: 2
+  retry_limit: 5
+  request_timeout_seconds: 120
+  backoff_base_seconds: 2.0
+  chunk_size_bytes: 1048576
+  resume_partial_archives: true
+
+extraction:
+  max_workers: 4
+  native_engine: pymupdf
+  native_profile: native-v1
+  minimum_characters_per_page: 100
+  minimum_document_text_coverage: 0.70
+
+ocr:
+  enabled: true
+  engine: tesseract
+  languages: [vie, eng]
+  profile: ocr-v1
+  dpi: 200
+  tessdata: null
+
+normalization:
+  profile: normalize-v1
+  unicode_form: NFC
+  remove_repeated_headers_footers: true
+  repair_line_wrap_hyphenation: true
+
+logging:
+  console_level: INFO
+  file_level: DEBUG
+  max_bytes: 10485760
+  backup_count: 10
+  progress_every: 100

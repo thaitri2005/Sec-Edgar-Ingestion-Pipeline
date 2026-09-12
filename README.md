@@ -8,25 +8,54 @@ For the complete implemented data flow, status model, production procedure,
 recovery playbooks, and maintenance checklist, see
 [`docs/PIPELINE_WORKFLOW.md`](docs/PIPELINE_WORKFLOW.md).
 
-## Planned Companion Dataset: Vietnam Annual Reports
+## Vietnam Annual Reports
 
-A separate companion pipeline is planned for Vietnamese listed-company annual
-reports used in NLP research. Its fixed initial scope is report years
+A separate companion pipeline is implemented for Vietnamese listed-company
+annual reports used in NLP research. Its fixed initial scope is report years
 `2008–2025`, using version `1.0.0` of the Zenodo *Vietnam Listed Companies
 Annual Reports PDF Dataset* (`13,884` selected PDFs). Live HSX/HNX collection is
 explicitly deferred.
 
-The Vietnamese pipeline will preserve immutable source PDFs and create
+The Vietnamese pipeline preserves immutable source PDFs and creates
 page-level JSONL plus document-level UTF-8 TXT. It will use a separate `VN_DATA`
 root and SQLite database because ticker/source-record identity, PDF processing,
 OCR, and stage-level recovery do not fit the SEC accession-based schema.
 
-This pipeline is a documented design and is **not implemented yet**. See
+The CLI, SQLite catalog, verified/resumable archive download, safe PDF
+extraction, native page extraction, selective `vie+eng` OCR, normalization,
+statistics, verification, and failed-stage retry are implemented. The live
+metadata-only catalog completed with 13,884 documents and 1,391 tickers; the
+large production archives have not been downloaded yet. The controlled 4.1 GB
+pilot archive has been initialized and is paused at a verified resumable handoff
+point so it can be continued from the operator's PowerShell window. See
 [`docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md`](docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md)
-for the proposed workflow, storage layout, schema, extraction strategy, pilot,
+for the workflow, storage layout, schema, extraction strategy, pilot,
 and production procedure. Track the ordered engineering phases and acceptance
 gates in
 [`docs/VIETNAM_IMPLEMENTATION_PLAN.md`](docs/VIETNAM_IMPLEMENTATION_PLAN.md).
+
+Use the Vietnam pipeline independently from `sec-edgar`:
+
+```powershell
+# Check PDF/OCR prerequisites
+.\.venv\Scripts\vn-reports.exe --config configs\vn_reports.yaml doctor --require-ocr
+
+# Metadata-only discovery; safe to rerun and does not download large archives
+.\.venv\Scripts\vn-reports.exe --config configs\vn_reports.yaml catalog `
+  --start-year 2008 --end-year 2025
+
+# Inspect the cataloged run
+.\.venv\Scripts\vn-reports.exe --config configs\vn_reports.yaml stats --run-id 1
+```
+
+Do not start the full `download` command as a quick test: it selects four
+archives totaling about 134.8 GB. The controlled first pilot is the 4.1 GB
+archive:
+
+```powershell
+.\.venv\Scripts\vn-reports.exe --config configs\vn_reports.yaml download `
+  --run-id 1 --archive-name vn_bctn_2006_2010.zip
+```
 
 ## Current Windows Workspace
 
@@ -35,7 +64,7 @@ The canonical project location on the current workstation is:
 ```text
 D:\Seed Grant Project\
 |-- SEC_DATA\    # implemented SEC runtime data
-|-- VN_DATA\     # planned Vietnamese annual-report runtime data
+|-- VN_DATA\     # implemented Vietnam runtime data and metadata
 |-- configs\
 |-- docs\
 `-- src\

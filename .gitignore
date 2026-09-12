@@ -11,6 +11,7 @@ dist/
 
 SEC_DATA/
 VN_DATA/
+configs/vn_reports.yaml
 logs/
 *.db
 *.db-shm

@@ -1,6 +1,6 @@
 # Vietnam Annual Report NLP Pipeline — Design and Operations Plan
 
-> **Status:** Planned companion pipeline. This document describes the agreed design; the corresponding CLI and storage implementation do not exist yet.
+> **Status:** Initial pipeline implemented and metadata catalog validated on 2026-09-13. The controlled 2006–2010 archive pilot is initialized and paused at a resumable handoff; the remaining production archives have not started.
 
 This pipeline will acquire and prepare Vietnamese listed-company annual reports for reproducible NLP research. It is deliberately separate from the implemented SEC EDGAR pipeline because Vietnamese annual reports use tickers and source-record identifiers rather than CIKs and accession numbers, and because their primary archival format is PDF rather than TXT/HTML.
 
@@ -114,9 +114,9 @@ Extract native text page by page
                         stats / verify / retry-failed
 ```
 
-## 5. Proposed application interface
+## 5. Application interface
 
-The companion package should live under `src/vn_report_pipeline/` and expose a separate `vn-reports` command. The proposed commands are:
+The companion package lives under `src/vn_report_pipeline/` and exposes a separate `vn-reports` command. The commands are:
 
 | Command | Purpose |
 | --- | --- |
@@ -130,7 +130,7 @@ The companion package should live under `src/vn_report_pipeline/` and expose a s
 | `retry-failed --run-id N --stage STAGE` | Retry failures only for download, extraction, OCR, or normalization. |
 | `run` | Execute the enabled stages in order; intended only after the pilot is validated. |
 
-Illustrative commands, not yet implemented:
+Operational commands:
 
 ```powershell
 vn-reports --config configs/vn_reports.yaml catalog `
@@ -144,7 +144,7 @@ vn-reports --config configs/vn_reports.yaml normalize --run-id 1
 vn-reports --config configs/vn_reports.yaml verify --run-id 1 --full-checksum
 ```
 
-## 6. Proposed configuration
+## 6. Configuration
 
 ```yaml
 storage:
@@ -186,7 +186,7 @@ normalization:
   repair_line_wrap_hyphenation: true
 ```
 
-On the current workstation, the proposed configuration file is
+On the current workstation, the private configuration file is
 `D:\Seed Grant Project\configs\vn_reports.yaml`. Because storage paths resolve
 relative to the configuration file, `../VN_DATA` becomes
 `D:\Seed Grant Project\VN_DATA`. This keeps both datasets under the same base
@@ -328,7 +328,7 @@ D:\Seed Grant Project\VN_DATA\
 
 Source record IDs and checksums control identity; filenames and tickers alone do not. Batch numbers never affect final paths.
 
-## 12. Proposed SQLite source of truth
+## 12. SQLite source of truth
 
 The Vietnamese pipeline uses the separate database
 `D:\Seed Grant Project\VN_DATA\metadata\metadata.db`. Sharing the SEC database

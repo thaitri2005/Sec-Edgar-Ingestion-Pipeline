@@ -7,7 +7,7 @@ Last updated: 2026-09-13
 | Pipeline | Scope | Status | Detailed documentation |
 | --- | --- | --- | --- |
 | SEC EDGAR | 10-K/10-Q for 2009–2025; 8-K for 2018–2025 | Implemented and operational | [SEC workflow](docs/PIPELINE_WORKFLOW.md) |
-| Vietnam annual reports | Historical reports for 2008–2025 | Planned; implementation not started | [Vietnam implementation plan](docs/VIETNAM_IMPLEMENTATION_PLAN.md) |
+| Vietnam annual reports | Historical reports for 2008–2025 | Implemented; catalog validated, production PDF download pending | [Vietnam implementation plan](docs/VIETNAM_IMPLEMENTATION_PLAN.md) |
 
 ## SEC EDGAR Pipeline
 
@@ -63,15 +63,15 @@ Last updated: 2026-09-13
 - Treat `D:\Seed Grant Project` as the canonical base folder.
 - Resolve `configs/config.yaml` value `../SEC_DATA` to
   `D:\Seed Grant Project\SEC_DATA`.
-- Resolve the planned `configs/vn_reports.yaml` value `../VN_DATA` to
+- Resolve `configs/vn_reports.yaml` value `../VN_DATA` to
   `D:\Seed Grant Project\VN_DATA`.
 - Keep both runtime roots ignored by Git while retaining them under the same
   movable base folder as the code and documentation.
 
-## Planned Companion Pipeline: Vietnam Annual Reports
+## Companion Pipeline: Vietnam Annual Reports
 
-This is a separate future implementation, not an extension of the SEC database
-schema and not currently exposed by the `sec-edgar` CLI.
+This is a separate implementation, not an extension of the SEC database schema.
+It is exposed through the independent `vn-reports` CLI.
 
 - Use version `1.0.0` of the Zenodo *Vietnam Listed Companies Annual Reports
   PDF Dataset* (`10.5281/zenodo.20949551`) as the fixed historical source.
@@ -83,23 +83,27 @@ schema and not currently exposed by the `sec-edgar` CLI.
 - Extract native PDF text first and selectively OCR only empty or low-quality
   pages with Vietnamese and English language support.
 - Use a separate `VN_DATA` root, SQLite database, configuration, package
-  namespace, and proposed `vn-reports` CLI.
+  namespace, and `vn-reports` CLI.
 - Track catalog, download, extraction, OCR, and normalization stages
   independently so each stage can resume and retry without invalidating valid
   upstream artifacts.
 - Pin dataset, code, extraction, OCR, and normalization versions for research
   reproducibility.
 
-The proposed architecture, schema, storage layout, quality controls, and
+The implemented architecture, schema, storage layout, quality controls, and
 operating model are documented in
 [`docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md`](docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md).
 The ordered phases, checklists, dependencies, verification gates, pilot, and
 production acceptance criteria are maintained in
 [`docs/VIETNAM_IMPLEMENTATION_PLAN.md`](docs/VIETNAM_IMPLEMENTATION_PLAN.md).
 
-Current Vietnam milestone status: all implementation phases are `Not started`.
-The next step is Phase 0 source/environment preflight; downloading the four
-large archives must wait until that gate passes.
+Current Vietnam milestone status: the package and complete stage workflow are
+implemented. Live run 1 cataloged exactly 13,884 documents across 1,391 tickers
+for 2008–2025, and SQLite integrity passed. Native extraction and an image-only
+`vie+eng` OCR smoke test passed. The next gate is a controlled pilot using the
+4.1 GB `vn_bctn_2006_2010.zip`. Its resumable `.part` file is initialized and
+paused for operator-controlled continuation; the remaining production archives
+must wait until that pilot is reviewed.
 
 ## Plan Maintenance
 
