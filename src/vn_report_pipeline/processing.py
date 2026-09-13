@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 import unicodedata
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from vn_report_pipeline.config import AppConfig
+from vn_report_pipeline.logging_config import log_event
 from vn_report_pipeline.metadata import MetadataRepository
 from vn_report_pipeline.models import ArtifactKind, Stage, StageStatus
 from vn_report_pipeline.storage import LocalStorage
@@ -20,8 +23,10 @@ class ProcessingService:
         self.config = config
         self.repository = repository
         self.storage = storage
+        self.logger = logging.getLogger("vn_report_pipeline")
 
     def extract(self, run_id: int, limit: int | None = None) -> tuple[int, int]:
+        self.repository.recover_stale(run_id)
         rows = [
             r
             for r in self.repository.documents(run_id, Stage.EXTRACTION)
@@ -33,6 +38,7 @@ class ProcessingService:
         )
 
     def ocr(self, run_id: int, limit: int | None = None) -> tuple[int, int]:
+        self.repository.recover_stale(run_id)
         if not self.config.ocr.enabled:
             raise ValueError("OCR is disabled in configuration")
         rows = [
@@ -45,6 +51,7 @@ class ProcessingService:
         )
 
     def normalize(self, run_id: int, limit: int | None = None) -> tuple[int, int]:
+        self.repository.recover_stale(run_id)
         rows = [
             r
             for r in self.repository.documents(run_id, Stage.NORMALIZATION)
@@ -62,8 +69,18 @@ class ProcessingService:
     def _run_documents(
         self, run_id: int, stage: Stage, rows, operation
     ) -> tuple[int, int]:
+        total = len(rows)
+        label = stage.value.capitalize()
         success = failed = 0
-        for row in rows:
+        started = time.monotonic()
+        last_progress = started
+        self.logger.info(
+            "%s started: %s pending documents for run %s", label, total, run_id
+        )
+        if not total:
+            return 0, 0
+        for index, row in enumerate(rows, 1):
+            document_started = time.monotonic()
             execution = self.repository.record_stage_start(
                 run_id,
                 row["document_id"],
@@ -83,6 +100,65 @@ class ProcessingService:
                     execution, row["document_id"], stage, StageStatus.FAILED, str(error)
                 )
                 failed += 1
+                log_event(
+                    self.logger,
+                    logging.ERROR,
+                    f"{label} failed for {row['document_id']}: {error}",
+                    run_id=run_id,
+                    stage=stage.value,
+                    document_id=row["document_id"],
+                    ticker=row["ticker"],
+                    report_year=row["report_year"],
+                    error=str(error),
+                    duration_seconds=round(time.monotonic() - document_started, 3),
+                )
+            now = time.monotonic()
+            if (
+                index == 1
+                or index == total
+                or index % self.config.logging.progress_every == 0
+                or now - last_progress >= 30
+            ):
+                elapsed = max(now - started, 0.001)
+                rate = index / elapsed
+                eta = (total - index) / rate if rate else 0
+                message = (
+                    "%s progress: %s/%s (%.1f%%), successful %s, failed %s, "
+                    "%.2f documents/s, elapsed %s, ETA %s; last %s %s (%s)"
+                    % (
+                        label,
+                        f"{index:,}",
+                        f"{total:,}",
+                        index / total * 100,
+                        f"{success:,}",
+                        f"{failed:,}",
+                        rate,
+                        _duration(elapsed),
+                        _duration(eta),
+                        row["ticker"],
+                        row["report_year"],
+                        row["document_id"],
+                    )
+                )
+                log_event(
+                    self.logger,
+                    logging.INFO,
+                    message,
+                    run_id=run_id,
+                    stage=stage.value,
+                    processed=index,
+                    total=total,
+                    successful=success,
+                    failed=failed,
+                    percent=round(index / total * 100, 3),
+                    elapsed_seconds=round(elapsed, 3),
+                    rate_documents_per_second=round(rate, 4),
+                    eta_seconds=round(eta, 3),
+                    document_id=row["document_id"],
+                    ticker=row["ticker"],
+                    report_year=row["report_year"],
+                )
+                last_progress = now
         return success, failed
 
     def _extract_one(self, row: dict[str, Any]) -> dict[str, Any]:
@@ -94,6 +170,7 @@ class ProcessingService:
         with pymupdf.open(self.storage.resolve(pdf["local_path"])) as document:
             if document.page_count < 1:
                 raise ValueError("PDF has no pages")
+            last_page_progress = time.monotonic()
             for index, page in enumerate(document):
                 text = page.get_text("text", sort=True)
                 quality = _quality(
@@ -102,6 +179,15 @@ class ProcessingService:
                 pages.append(
                     _page_dict(row, index + 1, text, "native", page.rect, quality)
                 )
+                now = time.monotonic()
+                if now - last_page_progress >= 30:
+                    self.logger.info(
+                        "Extraction document %s: page %s/%s",
+                        row["document_id"],
+                        index + 1,
+                        document.page_count,
+                    )
+                    last_page_progress = now
         relative = self.storage.pages_path(
             self.config.extraction.native_profile,
             row["ticker"],
@@ -136,11 +222,21 @@ class ProcessingService:
             raise ValueError("PDF or native page artifact is missing")
         pages = _read_jsonl(self.storage.resolve(native["local_path"]))
         by_page = {int(page["page_number"]): page for page in pages}
+        ocr_total = sum(bool(page["needs_ocr"]) for page in pages)
+        self.logger.info(
+            "OCR document %s (%s %s): %s pages require OCR",
+            row["document_id"],
+            row["ticker"],
+            row["report_year"],
+            ocr_total,
+        )
         languages = "+".join(self.config.ocr.languages)
         tessdata = str(self.config.ocr.tessdata) if self.config.ocr.tessdata else None
         with pymupdf.open(self.storage.resolve(pdf["local_path"])) as document:
             if document.page_count != len(pages):
                 raise ValueError("PDF and native JSONL page counts differ")
+            ocr_processed = 0
+            last_page_progress = time.monotonic()
             for index, page in enumerate(document):
                 current = by_page[index + 1]
                 if not current["needs_ocr"]:
@@ -160,6 +256,16 @@ class ProcessingService:
                 )
                 if replacement["quality_score"] >= current["quality_score"]:
                     by_page[index + 1] = replacement
+                ocr_processed += 1
+                now = time.monotonic()
+                if now - last_page_progress >= 30 or ocr_processed == ocr_total:
+                    self.logger.info(
+                        "OCR document %s: %s/%s OCR pages completed",
+                        row["document_id"],
+                        ocr_processed,
+                        ocr_total,
+                    )
+                    last_page_progress = now
         selected = [by_page[number] for number in sorted(by_page)]
         relative = self.storage.pages_path(
             self.config.ocr.profile,
@@ -234,6 +340,17 @@ def _pymupdf():
             "PyMuPDF is required; reinstall the project environment"
         ) from error
     return pymupdf
+
+
+def _duration(seconds: float) -> str:
+    total = max(0, int(seconds + 0.5))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:d}h {minutes:02d}m {secs:02d}s"
+    if minutes:
+        return f"{minutes:d}m {secs:02d}s"
+    return f"{secs:d}s"
 
 
 def _quality(text: str, minimum: int) -> dict[str, Any]:

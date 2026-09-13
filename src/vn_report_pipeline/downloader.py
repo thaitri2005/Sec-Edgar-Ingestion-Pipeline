@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import stat
+import time
 import zipfile
 from pathlib import PurePosixPath
 from typing import Any
 
 from vn_report_pipeline.config import AppConfig
 from vn_report_pipeline.http_client import HttpClient
+from vn_report_pipeline.logging_config import log_event
 from vn_report_pipeline.metadata import MetadataRepository
 from vn_report_pipeline.models import ArtifactKind, RunStatus, Stage, StageStatus
 from vn_report_pipeline.storage import LocalStorage, validate_pdf
@@ -25,6 +28,7 @@ class DownloadService:
         self.repository = repository
         self.storage = storage
         self.client = client
+        self.logger = logging.getLogger("vn_report_pipeline")
 
     def run(self, run_id: int, archive_name: str | None = None) -> tuple[int, int]:
         run = self.repository.get_run(run_id)
@@ -116,10 +120,14 @@ class DownloadService:
         pending = [row for row in rows if row["download_status"] == StageStatus.PENDING]
         if not pending:
             return 0, 0
+        total = len(pending)
         success = failed = 0
+        started = time.monotonic()
+        last_progress = started
+        self.logger.info("Extracting %s selected PDFs from %s", total, archive_name)
         with zipfile.ZipFile(archive_path) as archive:
             infos = _safe_members(archive)
-            for row in pending:
+            for index, row in enumerate(pending, 1):
                 execution = self.repository.record_stage_start(
                     run_id,
                     row["document_id"],
@@ -175,6 +183,55 @@ class DownloadService:
                         str(error),
                     )
                     failed += 1
+                    log_event(
+                        self.logger,
+                        logging.ERROR,
+                        f"PDF extraction failed for {row['document_id']}: {error}",
+                        run_id=run_id,
+                        stage=Stage.DOWNLOAD.value,
+                        archive=archive_name,
+                        document_id=row["document_id"],
+                        error=str(error),
+                    )
+                now = time.monotonic()
+                if (
+                    index == 1
+                    or index == total
+                    or index % self.config.logging.progress_every == 0
+                    or now - last_progress >= 30
+                ):
+                    elapsed = max(now - started, 0.001)
+                    rate = index / elapsed
+                    eta = (total - index) / rate if rate else 0
+                    log_event(
+                        self.logger,
+                        logging.INFO,
+                        (
+                            "PDF extraction from %s: %s/%s (%.1f%%), "
+                            "successful %s, failed %s, %.2f documents/s, ETA %sm"
+                            % (
+                                archive_name,
+                                f"{index:,}",
+                                f"{total:,}",
+                                index / total * 100,
+                                f"{success:,}",
+                                f"{failed:,}",
+                                rate,
+                                int(eta // 60),
+                            )
+                        ),
+                        run_id=run_id,
+                        stage=Stage.DOWNLOAD.value,
+                        archive=archive_name,
+                        processed=index,
+                        total=total,
+                        successful=success,
+                        failed=failed,
+                        percent=round(index / total * 100, 3),
+                        rate_documents_per_second=round(rate, 4),
+                        eta_seconds=round(eta, 3),
+                    )
+                    last_progress = now
         return success, failed
 
 

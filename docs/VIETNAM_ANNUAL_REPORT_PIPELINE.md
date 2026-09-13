@@ -144,6 +144,22 @@ vn-reports --config configs/vn_reports.yaml normalize --run-id 1
 vn-reports --config configs/vn_reports.yaml verify --run-id 1 --full-checksum
 ```
 
+### Progress logging
+
+Every long-running stage reports its pending-document total, the first completed
+document, and another progress line after `logging.progress_every` documents or
+30 seconds, whichever comes first. Progress lines include percentage, successful
+and failed counts, documents per second, elapsed time, ETA, and the most recently
+completed ticker, year, and document ID. Long native-extraction and OCR documents
+also emit page-level heartbeats. Individual failures are logged immediately.
+
+Console output is concise. Full structured context is written to
+`VN_DATA/logs/pipeline.jsonl` and can be followed from another PowerShell window:
+
+```powershell
+Get-Content .\VN_DATA\logs\pipeline.jsonl -Tail 20 -Wait
+```
+
 ## 6. Configuration
 
 ```yaml

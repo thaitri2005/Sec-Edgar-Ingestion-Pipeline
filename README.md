@@ -57,6 +57,15 @@ archive:
   --run-id 1 --archive-name vn_bctn_2006_2010.zip
 ```
 
+Extraction, OCR, PDF unpacking, and normalization now report percentage,
+success/failure totals, throughput, elapsed time, ETA, and the current document.
+Slow PDF/OCR work emits a page-level heartbeat. Follow the structured log from a
+second PowerShell window with:
+
+```powershell
+Get-Content .\VN_DATA\logs\pipeline.jsonl -Tail 20 -Wait
+```
+
 ## Current Windows Workspace
 
 The canonical project location on the current workstation is:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import sqlite3
 import zipfile
 from pathlib import Path
@@ -172,7 +173,8 @@ def test_zip_member_validation_rejects_traversal(tmp_path: Path) -> None:
             _safe_members(archive)
 
 
-def test_complete_pdf_to_normalized_text_pipeline(tmp_path: Path) -> None:
+def test_complete_pdf_to_normalized_text_pipeline(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO, logger="vn_report_pipeline")
     config = _config(tmp_path)
     storage = LocalStorage(config.storage.root_directory)
     storage.ensure_layout()
@@ -253,3 +255,7 @@ def test_complete_pdf_to_normalized_text_pipeline(tmp_path: Path) -> None:
         text = storage.resolve(text_artifact["local_path"]).read_text(encoding="utf-8")
         assert text.startswith("<<<PAGE 1>>>")
         assert "Bao cao thuong nien" in text
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("PDF extraction from" in message for message in messages)
+        assert any("Extraction progress:" in message for message in messages)
+        assert any("Normalization progress:" in message for message in messages)
