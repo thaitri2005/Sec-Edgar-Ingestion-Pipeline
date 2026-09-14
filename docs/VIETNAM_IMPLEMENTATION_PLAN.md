@@ -4,8 +4,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Implemented; live catalog validated, archive/PDF pilot pending |
-| Last updated | 2026-09-13 |
+| Status | Production PDFs acquired; native extraction complete; OCR calibration in progress |
+| Last updated | 2026-09-14 |
 | Canonical project root | `D:\Seed Grant Project` |
 | Runtime data root | `D:\Seed Grant Project\VN_DATA` |
 | Historical scope | Report years 2008–2025 inclusive |
@@ -45,15 +45,28 @@ Live exchange crawling and post-2025 updates are outside this milestone.
 | 1 | Package and CLI scaffold | Complete | Phase 0 |
 | 2 | Configuration, storage, and SQLite foundation | Complete | Phase 1 |
 | 3 | Zenodo catalog ingestion | Complete; live run 1 validated | Phase 2 |
-| 4 | Resumable archive download | Live 4.1 GB pilot initialized; operator resume pending | Phase 3 |
-| 5 | Safe PDF extraction and reconciliation | Implemented; live archive pilot pending | Phase 4 |
-| 6 | Native PDF text extraction and quality scoring | Implemented; corpus calibration pending | Phase 5 |
-| 7 | Selective Vietnamese/English OCR | Implemented; OCR smoke test passed | Phase 6 |
+| 4 | Resumable archive download | Complete; all production archives verified | Phase 3 |
+| 5 | Safe PDF extraction and reconciliation | Complete; 13,884 PDFs verified | Phase 4 |
+| 6 | Native PDF text extraction and quality scoring | Complete; 13,858 usable, 26 source failures | Phase 5 |
+| 7 | Selective Vietnamese/English OCR | In progress; production calibration passed first scanned report | Phase 6 |
 | 8 | Versioned text normalization | Implemented; corpus calibration pending | Phases 6–7 |
 | 9 | Operations, verification, and recovery commands | Complete | Phases 3–8 |
-| 10 | Automated test suite and documentation | In progress; 36 tests pass | Phases 1–9 |
-| 11 | Stratified pilot and threshold calibration | Not started | Phase 10 |
-| 12 | Full historical production run | Not started | Phase 11 |
+| 10 | Automated test suite and documentation | In progress; 39 tests pass | Phases 1–9 |
+| 11 | Stratified pilot and threshold calibration | In progress | Phase 10 |
+| 12 | Full historical production run | In progress; acquisition and native extraction complete | Phase 11 |
+
+### Production checkpoint — 2026-09-14
+
+- All 13,884 selected PDFs for 2008–2025 were downloaded and checksum-verified.
+- Native page extraction completed for 13,858 reports (99.81%). The remaining
+  26 PDFs are malformed at source and remain explicit extraction failures.
+- Extraction retry logic now resets only `FAILED` rows; valid `NEEDS_OCR` rows
+  are preserved. Run 1 metadata was reconciled from existing page artifacts.
+- A scanned 29-page production report completed selective `vie+eng` OCR in 20
+  seconds and produced 36,748 characters. One sparse 15-character page is now a
+  quality warning rather than a document failure.
+- Native MuPDF/Tesseract diagnostic noise is suppressed while structured stage
+  warnings, failures, progress, throughput, and ETA remain visible.
 
 ### Implementation checkpoint — 2026-09-13
 

@@ -493,15 +493,15 @@ class MetadataRepository:
                 extras += ",page_count=?"
                 values.append(page_count)
             if low_quality_pages is not None:
-                extras += ",low_quality_pages=?,ocr_status=?"
-                values.extend(
-                    [
-                        low_quality_pages,
+                extras += ",low_quality_pages=?"
+                values.append(low_quality_pages)
+                if stage == Stage.EXTRACTION:
+                    extras += ",ocr_status=?"
+                    values.append(
                         StageStatus.PENDING
                         if low_quality_pages
-                        else StageStatus.NOT_REQUIRED,
-                    ]
-                )
+                        else StageStatus.NOT_REQUIRED
+                    )
             values.append(document_id)
             self.connection.execute(
                 f"UPDATE documents SET {column}=?,updated_at=?,last_error=?{extras} WHERE document_id=?",

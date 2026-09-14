@@ -290,3 +290,16 @@ def test_complete_pdf_to_normalized_text_pipeline(tmp_path: Path, caplog) -> Non
         repository.connection.commit()
         assert repository.reset_failed(run_id, Stage.EXTRACTION) == 0
         assert repository.documents(run_id)[0]["extraction_status"] == "NEEDS_OCR"
+        execution = repository.record_stage_start(
+            run_id, "ACB_2024_fixture", Stage.OCR, "test-ocr-v1"
+        )
+        repository.record_stage_result(
+            execution,
+            "ACB_2024_fixture",
+            Stage.OCR,
+            StageStatus.SUCCESS,
+            low_quality_pages=1,
+        )
+        row = repository.documents(run_id)[0]
+        assert row["ocr_status"] == "SUCCESS"
+        assert row["low_quality_pages"] == 1

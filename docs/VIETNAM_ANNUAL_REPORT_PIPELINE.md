@@ -272,6 +272,12 @@ The first implementation should use OCRmyPDF/Tesseract when the host dependencie
 
 OCR output never replaces native raw extraction silently. Each page stores its method, engine version, language configuration, and quality metrics.
 
+A page that remains blank or sparse after OCR is retained with its quality flag
+and reported as a warning. It does not fail an otherwise usable document. Actual
+OCR engine exceptions, corrupt inputs, or missing artifacts remain document-stage
+failures. Native Tesseract diagnostics are suppressed at the console boundary;
+the pipeline's structured progress, warning, and error records remain visible.
+
 ### Derived formats
 
 Page JSONL is the canonical NLP extraction artifact:

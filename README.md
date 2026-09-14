@@ -25,9 +25,10 @@ The CLI, SQLite catalog, verified/resumable archive download, safe PDF
 extraction, native page extraction, selective `vie+eng` OCR, normalization,
 statistics, verification, and failed-stage retry are implemented. The live
 metadata-only catalog completed with 13,884 documents and 1,391 tickers; the
-large production archives have not been downloaded yet. The controlled 4.1 GB
-pilot archive has been initialized and is paused at a verified resumable handoff
-point so it can be continued from the operator's PowerShell window. See
+production archive download is complete, with all 13,884 PDFs checksum-verified.
+Native extraction produced usable page artifacts for 13,858 reports; 26 malformed
+source PDFs remain explicit failures. Selective OCR is in bounded production
+calibration before the full OCR stage. See
 [`docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md`](docs/VIETNAM_ANNUAL_REPORT_PIPELINE.md)
 for the workflow, storage layout, schema, extraction strategy, pilot,
 and production procedure. Track the ordered engineering phases and acceptance

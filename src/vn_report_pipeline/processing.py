@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import sys
 import time
 import unicodedata
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +73,7 @@ class ProcessingService:
         self, run_id: int, stage: Stage, rows, operation
     ) -> tuple[int, int]:
         total = len(rows)
-        label = stage.value.capitalize()
+        label = "OCR" if stage == Stage.OCR else stage.value.capitalize()
         success = failed = 0
         started = time.monotonic()
         last_progress = started
@@ -241,12 +244,13 @@ class ProcessingService:
                 current = by_page[index + 1]
                 if not current["needs_ocr"]:
                     continue
-                textpage = page.get_textpage_ocr(
-                    language=languages,
-                    dpi=self.config.ocr.dpi,
-                    full=True,
-                    tessdata=tessdata,
-                )
+                with _silence_native_stderr():
+                    textpage = page.get_textpage_ocr(
+                        language=languages,
+                        dpi=self.config.ocr.dpi,
+                        full=True,
+                        tessdata=tessdata,
+                    )
                 text = page.get_text("text", textpage=textpage, sort=True)
                 quality = _quality(
                     text, self.config.extraction.minimum_characters_per_page
@@ -287,8 +291,12 @@ class ProcessingService:
         )
         unresolved = sum(bool(page["needs_ocr"]) for page in selected)
         if unresolved:
-            raise ValueError(f"OCR left {unresolved} low-quality pages")
-        return {}
+            self.logger.warning(
+                "OCR completed for %s with %s unresolved blank or sparse pages",
+                row["document_id"],
+                unresolved,
+            )
+        return {"low_quality_pages": unresolved}
 
     def _normalize_one(self, row: dict[str, Any]) -> dict[str, Any]:
         artifact = self.repository.artifact(
@@ -353,6 +361,24 @@ def _duration(seconds: float) -> str:
     if minutes:
         return f"{minutes:d}m {secs:02d}s"
     return f"{secs:d}s"
+
+
+@contextmanager
+def _silence_native_stderr():
+    try:
+        stderr_fd = sys.stderr.fileno()
+        saved_fd = os.dup(stderr_fd)
+        null_fd = os.open(os.devnull, os.O_WRONLY)
+    except (AttributeError, OSError):
+        yield
+        return
+    try:
+        os.dup2(null_fd, stderr_fd)
+        yield
+    finally:
+        os.dup2(saved_fd, stderr_fd)
+        os.close(saved_fd)
+        os.close(null_fd)
 
 
 def _quality(text: str, minimum: int) -> dict[str, Any]:

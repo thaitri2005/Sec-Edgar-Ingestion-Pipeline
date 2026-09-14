@@ -99,11 +99,11 @@ production acceptance criteria are maintained in
 
 Current Vietnam milestone status: the package and complete stage workflow are
 implemented. Live run 1 cataloged exactly 13,884 documents across 1,391 tickers
-for 2008–2025, and SQLite integrity passed. Native extraction and an image-only
-`vie+eng` OCR smoke test passed. The next gate is a controlled pilot using the
-4.1 GB `vn_bctn_2006_2010.zip`. Its resumable `.part` file is initialized and
-paused for operator-controlled continuation; the remaining production archives
-must wait until that pilot is reviewed.
+for 2008–2025, and all 13,884 source PDFs were downloaded and checksum-verified.
+Native extraction produced usable page artifacts for 13,858 reports; 26 malformed
+source PDFs are recorded as permanent extraction failures. Selective `vie+eng`
+OCR is now in bounded corpus calibration. A scanned 29-page production report
+completed with 36,748 extracted characters and one sparse-page quality warning.
 
 ## Plan Maintenance
 
