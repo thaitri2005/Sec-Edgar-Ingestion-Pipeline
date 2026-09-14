@@ -31,7 +31,7 @@ class ProcessingService:
             r
             for r in self.repository.documents(run_id, Stage.EXTRACTION)
             if r["download_status"] == StageStatus.SUCCESS
-            and r["extraction_status"] != StageStatus.SUCCESS
+            and r["extraction_status"] == StageStatus.PENDING
         ]
         return self._run_documents(
             run_id, Stage.EXTRACTION, rows[:limit] if limit else rows, self._extract_one
@@ -339,6 +339,8 @@ def _pymupdf():
         raise RuntimeError(
             "PyMuPDF is required; reinstall the project environment"
         ) from error
+    pymupdf.TOOLS.mupdf_display_errors(False)
+    pymupdf.TOOLS.mupdf_display_warnings(False)
     return pymupdf
 
 

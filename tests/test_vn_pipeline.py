@@ -15,7 +15,7 @@ from vn_report_pipeline.downloader import DownloadService, _safe_members
 from vn_report_pipeline.http_client import HttpClient
 from vn_report_pipeline.config import DownloadConfig
 from vn_report_pipeline.metadata import MetadataRepository
-from vn_report_pipeline.models import CatalogDocument, RunStatus
+from vn_report_pipeline.models import CatalogDocument, RunStatus, Stage, StageStatus
 from vn_report_pipeline.operations import verify_run
 from vn_report_pipeline.processing import ProcessingService
 from vn_report_pipeline.storage import LocalStorage
@@ -173,6 +173,30 @@ def test_zip_member_validation_rejects_traversal(tmp_path: Path) -> None:
             _safe_members(archive)
 
 
+@pytest.mark.parametrize(
+    "existing_status",
+    [StageStatus.SUCCESS, StageStatus.NEEDS_OCR, StageStatus.FAILED],
+)
+def test_extraction_does_not_repeat_non_pending_documents(
+    tmp_path: Path, existing_status: StageStatus
+) -> None:
+    class Repository:
+        def recover_stale(self, _run_id):
+            return None
+
+        def documents(self, _run_id, _stage):
+            return [
+                {
+                    "download_status": StageStatus.SUCCESS,
+                    "extraction_status": existing_status,
+                }
+            ]
+
+    config = _config(tmp_path)
+    service = ProcessingService(config, Repository(), LocalStorage(tmp_path))
+    assert service.extract(1) == (0, 0)
+
+
 def test_complete_pdf_to_normalized_text_pipeline(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO, logger="vn_report_pipeline")
     config = _config(tmp_path)
@@ -259,3 +283,10 @@ def test_complete_pdf_to_normalized_text_pipeline(tmp_path: Path, caplog) -> Non
         assert any("PDF extraction from" in message for message in messages)
         assert any("Extraction progress:" in message for message in messages)
         assert any("Normalization progress:" in message for message in messages)
+        repository.connection.execute(
+            "UPDATE documents SET extraction_status='NEEDS_OCR' WHERE document_id=?",
+            ("ACB_2024_fixture",),
+        )
+        repository.connection.commit()
+        assert repository.reset_failed(run_id, Stage.EXTRACTION) == 0
+        assert repository.documents(run_id)[0]["extraction_status"] == "NEEDS_OCR"

@@ -652,7 +652,7 @@ class MetadataRepository:
         with self.connection:
             count = self.connection.execute(
                 f"""UPDATE documents SET {column}='PENDING',last_error=NULL,updated_at=?
-                WHERE {column} IN ('FAILED','NEEDS_OCR') AND document_id IN
+                WHERE {column}='FAILED' AND document_id IN
                 (SELECT document_id FROM run_documents WHERE run_id=?)""",
                 (utc_now(), run_id),
             ).rowcount
